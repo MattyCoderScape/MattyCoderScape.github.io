@@ -93,7 +93,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 3";
+          portInfo.usbProductId.toString(16) + "Ver 4";
 
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -106,14 +106,10 @@ async function openClose() {
           }
           
 		  // Works to display some DECIMAL numbers
-		  /*
 		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
-          console.log(value);
-		  */
+          console.log(value.length);
 		  
-		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
-          console.log(value.toString(16).toUpperCase().padStart(2,'0'));
-		  
+		  //document.getElementById("debug_window").value += value;
 		  
         }
 
