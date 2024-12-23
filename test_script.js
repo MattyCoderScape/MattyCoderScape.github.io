@@ -91,7 +91,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 9";
+          portInfo.usbProductId.toString(16) + "Ver 10";
 
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -99,13 +99,20 @@ async function openClose() {
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
-            reader.releaseLock(); // release the lock on the reader so the owner port can be closed
+            
+			// Works to display some DECIMAL numbers
+			document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
+			console.log(value);
+		  
+			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
           }
           
+		  /*
 		  // Works to display some DECIMAL numbers
 		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
           console.log(value);
+		  */
 		  
 		  document.getElementById("debug_window").value += ("RAW: " + value + "\n");
 		  document.getElementById("debug_window").value += ("Strung: " + value.toString(16) + "\n");
@@ -174,14 +181,14 @@ async function sendString() {
   
   const writer = port.writable.getWriter();
 
-  //const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]); //Get ASCII Status
-  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]); //Get FW Version
+  //const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]); //Request ASCII Status
+  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]); //Request FW Version
   await writer.write(SerData);
   
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
   document.getElementById("term_window").value += "\n>" + outString + "\n";
-  document.getElementById("term_window").value += "\n>>Typed Length: " + outString.length + "\n";
-  document.getElementById("term_window").value += "\n>>Sent Length: " + SerData.length + "\n";
+  //document.getElementById("term_window").value += "\n>>Typed Length: " + outString.length + "\n";
+  //document.getElementById("term_window").value += "\n>>Sent Length: " + SerData.length + "\n";
 
   // close the writer since we're done sending for now
   writer.close();
