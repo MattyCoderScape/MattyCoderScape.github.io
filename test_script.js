@@ -92,8 +92,9 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 24";
+          portInfo.usbProductId.toString(16) + "Ver 25";
 
+		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -104,15 +105,13 @@ async function openClose() {
             reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
           }
-		  // value is a Uint8Array.
-		  
-		  // Works to display some DECIMAL numbers, but they look sketchy
-		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0'));
+		  // value is a Uint8Array TypedArray Object.
+		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0') + " ");
 		  
           console.log(value);
         }
 		
-		document.getElementById("debug_window").value += ("Expected Response: 3C 05 FA 04 10 \n");
+		
 		//document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
 
         // If we've reached this point then we're closing the port
@@ -194,6 +193,7 @@ async function sendString() {
 // Clear the contents of the term_window textarea
 function clearTerminal() {
   document.getElementById("term_window").value = "";
+  document.getElementById("debug_window").value = "";
 }
 
 // This function in bound to "keydown" in the term_input textarea.
