@@ -92,11 +92,8 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 20";
+          portInfo.usbProductId.toString(16) + "Ver 23";
 
-		//const inner_cnt;
-		
-		let RecData = new Uint8Array();
 		
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -104,16 +101,13 @@ async function openClose() {
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
-            //inner_cnt = cnt++; //Count how many times the reader finishes
-			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
+            reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
           }
-		  
-		  RecData = RecData.concat(value);
+		  // value is a Uint8Array.
 		  
 		  // Works to display some DECIMAL numbers, but they look sketchy
-		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
-		  document.getElementById("debug_window").value += RecData;
+		  value.forEach((element) => document.getElementById("term_window").value += ((element.toString(16).toUpperCase().padStart(2,'0')) + " "); // write the incoming string to the term_window textarea
 		  
           console.log(value);
         }
