@@ -92,7 +92,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 23";
+          portInfo.usbProductId.toString(16) + "Ver 24";
 
 		
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
@@ -107,7 +107,7 @@ async function openClose() {
 		  // value is a Uint8Array.
 		  
 		  // Works to display some DECIMAL numbers, but they look sketchy
-		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0'); // write the incoming string to the term_window textarea
+		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0'));
 		  
           console.log(value);
         }
