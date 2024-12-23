@@ -103,7 +103,7 @@ async function openClose() {
             break;
           }
           document.getElementById("term_window").value += parseInt(value, 16); // write the incoming string to the term_window textarea
-          console.log(value);
+          console.log(parseInt(value, 16));
         }
 
         // If we've reached this point then we're closing the port
