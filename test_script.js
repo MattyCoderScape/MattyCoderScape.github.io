@@ -102,7 +102,7 @@ async function openClose() {
             reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
           }
-          document.getElementById("term_window").value += parseInt(value, 16); // write the incoming string to the term_window textarea
+          document.getElementById("term_window").value += value.toString(16); // write the incoming string to the term_window textarea
           console.log(value);
         }
 
