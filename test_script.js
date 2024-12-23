@@ -107,7 +107,7 @@ async function openClose() {
 		  // value is a Uint8Array.
 		  
 		  // Works to display some DECIMAL numbers, but they look sketchy
-		  value.forEach((element) => document.getElementById("term_window").value += ((element.toString(16).toUpperCase().padStart(2,'0')) + " "); // write the incoming string to the term_window textarea
+		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0'); // write the incoming string to the term_window textarea
 		  
           console.log(value);
         }
