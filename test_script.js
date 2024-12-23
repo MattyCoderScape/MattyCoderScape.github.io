@@ -69,7 +69,7 @@ async function openClose() {
           holdPort = null;
         }
         // Grab the currently selected baud rate from the drop down menu
-        var baudSelected = parseInt(document.getElementById("baud_rate").value);
+        //var baudSelected = parseInt(document.getElementById("baud_rate").value);
         //await port.open({ baudRate: baudSelected });
 		await port.open({ baudRate: 9600 });
 
@@ -87,7 +87,7 @@ async function openClose() {
         document.getElementById("term_input").disabled = false;
         document.getElementById("send").disabled = false;
         document.getElementById("clear").disabled = false;
-        document.getElementById("change").disabled = false;
+        //document.getElementById("change").disabled = false;
 
         // NOT SUPPORTED BY ALL ENVIRONMENTS
         // Get port info and display it to the user in the port_info span
@@ -96,7 +96,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 27";
+          portInfo.usbProductId.toString(16) + "Ver 28";
 
 		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
