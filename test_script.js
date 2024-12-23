@@ -154,12 +154,18 @@ async function sendString() {
   document.getElementById("term_input").value = ""; // clear the term_input textarea for the next user input
 
   // Get a text encoder, pipe it to the SerialPort object, and get a writer
-  const textEncoder = new TextEncoderStream();
-  const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
-  const writer = textEncoder.writable.getWriter();
+  //const textEncoder = new TextEncoderStream();
+  //const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+  //const writer = textEncoder.writable.getWriter();
 
   // write the outString to the writer
-  await writer.write(outString);
+  //await writer.write(outString);
+  
+  const writer = port.writable.getWriter();
+
+  const SerialData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]);
+  await writer.write(SerialData);
+  
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
   document.getElementById("term_window").value += "\n>" + outString + "\n";
   document.getElementById("term_window").value += "\n>>Length: " + outString.length + "\n";
