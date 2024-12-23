@@ -96,9 +96,9 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 29";
+          portInfo.usbProductId.toString(16) + "Ver 30";
 
-		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
+		//document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
