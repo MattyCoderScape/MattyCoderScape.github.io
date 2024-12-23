@@ -65,9 +65,8 @@ async function openClose() {
           holdPort = null;
         }
         // Grab the currently selected baud rate from the drop down menu
-        //var baudSelected = parseInt(document.getElementById("baud_rate").value);
-        // Open the serial port with the hardcoded baud rate of 9600
-        await port.open({ baudRate: 9600 }); //This doesn't matter because the FT245RL chip is a FIFO not a UART
+        var baudSelected = parseInt(document.getElementById("baud_rate").value);
+        await port.open({ baudRate: baudSelected });
 
         // Create a textDecoder stream and get its reader, pipe the port reader to it
         const textDecoder = new TextDecoderStream();
