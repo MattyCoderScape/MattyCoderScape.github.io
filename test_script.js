@@ -162,7 +162,7 @@ async function sendString() {
   await writer.write(outString);
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
   document.getElementById("term_window").value += "\n>" + outString + "\n";
-  document.getElementById("term_window").value += "\n>> Length" + outString.length.toString(10) + "\n";
+  document.getElementById("term_window").value += "\n>>Length: " + outString.length + "\n";
 
   // close the writer since we're done sending for now
   writer.close();
