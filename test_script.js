@@ -56,10 +56,13 @@ async function openClose() {
     portPromise = new Promise((resolve) => {
       // Async anonymous function to open the port
       (async () => {
-        // Check to see if we've stashed a SerialPort object
+        const filters = [
+		{ usbVendorId: 0x0403, usbProductId: 0x6001 },
+		];
+		// Check to see if we've stashed a SerialPort object
         if (holdPort == null) {
           // If we haven't stashed a SerialPort then ask the user to select one
-          port = await navigator.serial.requestPort();
+          port = await navigator.serial.requestPort({ filters });
         } else {
           // If we have stashed a SerialPort then use it and clear the stash
           port = holdPort;
@@ -92,7 +95,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 25";
+          portInfo.usbProductId.toString(16) + "Ver 26";
 
 		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
@@ -182,8 +185,6 @@ async function sendString() {
   
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
   document.getElementById("term_window").value += "\n>" + outString + "\n";
-  //document.getElementById("term_window").value += "\n>>Typed Length: " + outString.length + "\n";
-  //document.getElementById("term_window").value += "\n>>Sent Length: " + SerData.length + "\n";
 
   // close the writer since we're done sending for now
   writer.close();
