@@ -92,32 +92,28 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 16";
+          portInfo.usbProductId.toString(16) + "Ver 17";
 
+		const inner_cnt;
+		
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
         // When reader.cancel() is called by another function, reader will be forced to return done=true and break the loop
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
-            	  
-			cnt++;
+            inner_cnt = cnt++; //Count how many times the reader finishes
 			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
-            
-			//const RecData = new Uint8Array();
-			//RecData = Arrays.copyOf(value, value.length);
-			
-			break;
-          }
-          
+            break;
+          }          
 		  
-		  // Works to display some DECIMAL numbers
+		  // Works to display some DECIMAL numbers, but they look sketchy
 		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
           
 		  console.log(value);
 		  		  
 		  document.getElementById("debug_window").value += ("Expected Response: 3C 05 FA 04 10 \n");
-		  document.getElementById("debug_window").value += toString(cnt) + "\n");
+		  document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
         }
 
         // If we've reached this point then we're closing the port
