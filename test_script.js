@@ -103,7 +103,7 @@ async function openClose() {
             break;
           }
           document.getElementById("term_window").value += parseInt(value, 16); // write the incoming string to the term_window textarea
-          console.log(parseInt(value, 16));
+          console.log(value);
         }
 
         // If we've reached this point then we're closing the port
@@ -171,7 +171,8 @@ async function sendString() {
   
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
   document.getElementById("term_window").value += "\n>" + outString + "\n";
-  document.getElementById("term_window").value += "\n>>Length: " + outString.length + "\n";
+  document.getElementById("term_window").value += "\n>>Typed Length: " + outString.length + "\n";
+  document.getElementById("term_window").value += "\n>>Sent Length: " + SerData.length + "\n";
 
   // close the writer since we're done sending for now
   writer.close();
