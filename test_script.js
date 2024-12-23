@@ -163,7 +163,8 @@ async function sendString() {
   
   const writer = port.writable.getWriter();
 
-  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]);
+  //const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]); //Get ASCII Status
+  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]); //Get FW Version
   await writer.write(SerData);
   
   // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
@@ -171,10 +172,7 @@ async function sendString() {
   document.getElementById("term_window").value += "\n>>Length: " + outString.length + "\n";
 
   // close the writer since we're done sending for now
-  //writer.close();
-  
-  writer.releaseLock();
-  
+  writer.close();
   await writableStreamClosed;
 }
 
