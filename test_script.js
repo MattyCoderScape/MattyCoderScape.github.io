@@ -70,7 +70,8 @@ async function openClose() {
         }
         // Grab the currently selected baud rate from the drop down menu
         var baudSelected = parseInt(document.getElementById("baud_rate").value);
-        await port.open({ baudRate: baudSelected });
+        //await port.open({ baudRate: baudSelected });
+		await port.open({ baudRate: 9600 });
 
         // Create a textDecoder stream and get its reader, pipe the port reader to it
         //const textDecoder = new TextDecoderStream();
@@ -95,7 +96,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 26";
+          portInfo.usbProductId.toString(16) + "Ver 27";
 
 		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
