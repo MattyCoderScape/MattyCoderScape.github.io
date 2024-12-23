@@ -91,7 +91,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 13";
+          portInfo.usbProductId.toString(16) + "Ver 15";
 
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -102,8 +102,8 @@ async function openClose() {
             	  
 			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             
-			const RecData = new Uint8Array();
-			RecData = Arrays.copyOf(value, value.length);
+			//const RecData = new Uint8Array();
+			//RecData = Arrays.copyOf(value, value.length);
 			
 			break;
           }
@@ -114,7 +114,7 @@ async function openClose() {
           
 		  console.log(value);
 		  		  
-		  document.getElementById("debug_window").value += ("RAW: " + RecData + "\n");
+		  document.getElementById("debug_window").value += ("Expected Response: 3C 05 FA 04 10 \n");
 		  
         }
 
