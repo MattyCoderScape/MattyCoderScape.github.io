@@ -69,9 +69,11 @@ async function openClose() {
         await port.open({ baudRate: baudSelected });
 
         // Create a textDecoder stream and get its reader, pipe the port reader to it
-        const textDecoder = new TextDecoderStream();
-        reader = textDecoder.readable.getReader();
-        const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+        //const textDecoder = new TextDecoderStream();
+        //reader = textDecoder.readable.getReader();
+        reader = port.readable.getReader();
+		
+		//const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
 
 		//const reader = port.readable.getReader();
 
@@ -91,7 +93,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16);
+          portInfo.usbProductId.toString(16) + "Ver 1";
 
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -102,7 +104,7 @@ async function openClose() {
             reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
           }
-          document.getElementById("term_window").value += value.toString(16); // write the incoming string to the term_window textarea
+          document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
           console.log(value);
         }
 
@@ -112,9 +114,12 @@ async function openClose() {
         // That should have broken the textDecoder pipe and propagated an error up the chain
         // which we catch when this promise resolves
         
-		await readableStreamClosed.catch(() => {
+		
+		//await readableStreamClosed.catch(() => {
           /* Ignore the error */
-        });
+        //});
+		
+		
         // Now that all of the locks are released and the decoder is shut down, we can close the port
         await port.close();
 
