@@ -65,14 +65,16 @@ async function openClose() {
           holdPort = null;
         }
         // Grab the currently selected baud rate from the drop down menu
-        var baudSelected = parseInt(document.getElementById("baud_rate").value);
-        // Open the serial port with the selected baud rate
-        await port.open({ baudRate: baudSelected });
+        //var baudSelected = parseInt(document.getElementById("baud_rate").value);
+        // Open the serial port with the hardcoded baud rate of 9600
+        await port.open({ baudRate: 9600 }); //This doesn't matter because the FT245RL chip is a FIFO not a UART
 
         // Create a textDecoder stream and get its reader, pipe the port reader to it
         const textDecoder = new TextDecoderStream();
-        reader = textDecoder.readable.getReader();
-        const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+        //reader = textDecoder.readable.getReader();
+        //const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+
+		const reader = port.readable.getReader();
 
         // If we've reached this point then we're connected to a serial port
         // Set a bunch of variables and enable the appropriate DOM elements
@@ -110,7 +112,8 @@ async function openClose() {
         // we did this before exiting the read loop.
         // That should have broken the textDecoder pipe and propagated an error up the chain
         // which we catch when this promise resolves
-        await readableStreamClosed.catch(() => {
+        
+		await readableStreamClosed.catch(() => {
           /* Ignore the error */
         });
         // Now that all of the locks are released and the decoder is shut down, we can close the port
