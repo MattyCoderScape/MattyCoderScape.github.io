@@ -92,7 +92,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 17";
+          portInfo.usbProductId.toString(16) + "Ver 18";
 
 		const inner_cnt;
 		
@@ -105,16 +105,14 @@ async function openClose() {
             inner_cnt = cnt++; //Count how many times the reader finishes
 			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             break;
-          }          
-		  
+          }
 		  // Works to display some DECIMAL numbers, but they look sketchy
 		  document.getElementById("term_window").value += value; // write the incoming string to the term_window textarea
-          
-		  console.log(value);
-		  		  
-		  document.getElementById("debug_window").value += ("Expected Response: 3C 05 FA 04 10 \n");
-		  document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
+          console.log(value);
         }
+		
+		document.getElementById("debug_window").value += ("Expected Response: 3C 05 FA 04 10 \n");
+		document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
 
         // If we've reached this point then we're closing the port
         // first step to closing the port was releasing the lock on the reader
