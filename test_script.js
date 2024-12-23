@@ -23,6 +23,8 @@ window.onload = function () {
     // Clear the term_window textarea
     clearTerminal();
 
+	const RecData = new Uint8Array[];
+
     // See if there's a prefill query string on the URL
     const params = new Proxy(new URLSearchParams(window.location.search), {
       get: (searchParams, prop) => searchParams.get(prop),
@@ -91,7 +93,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 11";
+          portInfo.usbProductId.toString(16) + "Ver 12";
 
         // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
         // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
@@ -102,7 +104,7 @@ async function openClose() {
             	  
 			reader.releaseLock(); // release the lock on the reader so the owner port can be closed
             
-			const RecData = Array.from(value);
+			RecData = [...value];
 			
 			break;
           }
