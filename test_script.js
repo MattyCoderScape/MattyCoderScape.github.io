@@ -71,10 +71,10 @@ async function openClose() {
 
         // Create a textDecoder stream and get its reader, pipe the port reader to it
         const textDecoder = new TextDecoderStream();
-        //reader = textDecoder.readable.getReader();
-        //const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+        reader = textDecoder.readable.getReader();
+        const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
 
-		const reader = port.readable.getReader();
+		//const reader = port.readable.getReader();
 
         // If we've reached this point then we're connected to a serial port
         // Set a bunch of variables and enable the appropriate DOM elements
