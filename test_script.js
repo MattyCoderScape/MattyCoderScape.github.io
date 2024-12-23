@@ -14,7 +14,7 @@ window.onload = function () {
     document
       .getElementById("openclose_port")
       .addEventListener("click", openClose);
-    document.getElementById("change").addEventListener("click", changeSettings);
+    //document.getElementById("change").addEventListener("click", changeSettings);
     document.getElementById("clear").addEventListener("click", clearTerminal);
     document.getElementById("send").addEventListener("click", sendString);
     document
@@ -96,7 +96,7 @@ async function openClose() {
           "Connected to device with VID " +
           "0x" + portInfo.usbVendorId.toString(16) +
           " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 28";
+          portInfo.usbProductId.toString(16) + "Ver 29";
 
 		document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
 		
@@ -138,7 +138,7 @@ async function openClose() {
         document.getElementById("openclose_port").innerText = "Open";
         document.getElementById("term_input").disabled = true;
         document.getElementById("send").disabled = true;
-        document.getElementById("change").disabled = true;
+        //document.getElementById("change").disabled = true;
         document.getElementById("port_info").innerText = "Disconnected";
 
         console.log("port closed");
