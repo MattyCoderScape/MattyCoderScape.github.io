@@ -1,212 +1,165 @@
-let portOpen = false; // tracks whether a port is corrently open
-let portPromise; // promise used to wait until port succesfully closed
-let holdPort = null; // use this to park a SerialPort object when we change settings so that we don't need to ask the user to select it again
-let port; // current SerialPort object
-let reader; // current port reader object so we can call .cancel() on it to interrupt port reading
-//let cnt = 0;
+avaScriptlet portOpen = false;           // tracks whether a port is currently open
+let portPromise;                // promise used to wait until port successfully closed
+let holdPort = null;            // park a SerialPort object when changing settings
+let port;                       // current SerialPort object
+let reader;                     // current port reader so we can .cancel() it
 
 // Do these things when the window is done loading
 window.onload = function () {
-  // Check to make sure we can actually do serial stuff
   if ("serial" in navigator) {
-    // The Web Serial API is supported.
-    // Connect event listeners to DOM elements
-    document
-      .getElementById("openclose_port")
-      .addEventListener("click", openClose);
-    //document.getElementById("change").addEventListener("click", changeSettings);
+    // Connect event listeners
+    document.getElementById("openclose_port").addEventListener("click", openClose);
     document.getElementById("clear").addEventListener("click", clearTerminal);
     document.getElementById("send").addEventListener("click", sendString);
-    document
-      .getElementById("term_input")
-      .addEventListener("keydown", detectEnter);
+    document.getElementById("term_input").addEventListener("keydown", detectEnter);
 
-    // Clear the term_window textarea
+    // Clear terminal on load
     clearTerminal();
 
-	// See if there's a prefill query string on the URL
-    const params = new Proxy(new URLSearchParams(window.location.search), {
-      get: (searchParams, prop) => searchParams.get(prop),
-    });
-    // Get the value of "some_key" in eg "https://example.com/?some_key=some_value"
-    let preFill = params.prefill; // "some_value"
-    if (preFill != null) {
-      // If there's a prefill string then pop it into the term_input textarea
+    // Optional: prefill from URL query ?prefill=...
+    const params = new URLSearchParams(window.location.search);
+    const preFill = params.get("prefill");
+    if (preFill) {
       document.getElementById("term_input").value = preFill;
     }
   } else {
-    // The Web Serial API is not supported.
-    // Warn the user that their browser won't do stupid serial tricks
     alert("The Web Serial API is not supported by your browser");
   }
 };
 
-// This function is bound to the "Open" button, which also becomes the "Close" button
-// and it detects which thing to do by checking the portOpen variable
+// Open / Close port button handler
 async function openClose() {
-  // Is there a port open already?
   if (portOpen) {
-    // Port's open. Call reader.cancel() forces reader.read() to return done=true
-    // so that the read loop will break and close the port
-    reader.cancel();
+    // Close existing port
+    if (reader) reader.cancel();
     console.log("attempt to close");
   } else {
-    // No port is open so we should open one.
-    // We write a promise to the global portPromise var that resolves when the port is closed
-    portPromise = new Promise((resolve) => {
-      // Async anonymous function to open the port
-      (async () => {
-        const filters = [
-		{ usbVendorId: 0x0403, usbProductId: 0x6001 },
-		];
-		// Check to see if we've stashed a SerialPort object
+    // Open new port
+    portPromise = new Promise(async (resolve) => {
+      try {
+        const filters = [{ usbVendorId: 0x0403, usbProductId: 0x6001 }];
         if (holdPort == null) {
-          // If we haven't stashed a SerialPort then ask the user to select one
           port = await navigator.serial.requestPort({ filters });
         } else {
-          // If we have stashed a SerialPort then use it and clear the stash
           port = holdPort;
           holdPort = null;
         }
-        // Grab the currently selected baud rate from the drop down menu
-        //var baudSelected = parseInt(document.getElementById("baud_rate").value);
-        //await port.open({ baudRate: baudSelected });
-		await port.open({ baudRate: 9600 });
 
-        // Create a textDecoder stream and get its reader, pipe the port reader to it
-        //const textDecoder = new TextDecoderStream();
-        //reader = textDecoder.readable.getReader();
+        await port.open({ baudRate: 9600 });  // change to 115200 if needed
+
         reader = port.readable.getReader();
-		
-		//const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
 
-        // If we've reached this point then we're connected to a serial port
-        // Set a bunch of variables and enable the appropriate DOM elements
         portOpen = true;
         document.getElementById("openclose_port").innerText = "Close";
         document.getElementById("term_input").disabled = false;
         document.getElementById("send").disabled = false;
         document.getElementById("clear").disabled = false;
-        //document.getElementById("change").disabled = false;
 
-        // NOT SUPPORTED BY ALL ENVIRONMENTS
-        // Get port info and display it to the user in the port_info span
-        let portInfo = port.getInfo();
+        // Show port info
+        const info = port.getInfo();
         document.getElementById("port_info").innerText =
-          "Connected to device with VID " +
-          "0x" + portInfo.usbVendorId.toString(16) +
-          " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 30";
+          `Connected to device with VID 0x${info.usbVendorId?.toString(16) || "?"} ` +
+          `and PID 0x${info.usbProductId?.toString(16) || "?"}`;
 
-		//document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
-		
-        // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
-        // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
-        // When reader.cancel() is called by another function, reader will be forced to return done=true and break the loop
+        // Read loop
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
-            reader.releaseLock(); // release the lock on the reader so the owner port can be closed
+            reader.releaseLock();
             break;
           }
-		  // value is a Uint8Array TypedArray Object.
-		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0') + " ");
-		  
-          console.log(value);
+          // Display received bytes as hex
+          let hexLine = "";
+          value.forEach((b) => {
+            hexLine += b.toString(16).toUpperCase().padStart(2, "0") + " ";
+          });
+          document.getElementById("term_window").value += hexLine + "\n";
+          document.getElementById("term_window").scrollTop = document.getElementById("term_window").scrollHeight;
+          console.log("RX:", hexLine.trim());
         }
-		
-		
-		//document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
 
-        // If we've reached this point then we're closing the port
-        // first step to closing the port was releasing the lock on the reader
-        // we did this before exiting the read loop.
-        // That should have broken the textDecoder pipe and propagated an error up the chain
-        // which we catch when this promise resolves
-        
-		
-		//await readableStreamClosed.catch(() => {
-          /* Ignore the error */
-        //});
-		
-		
-        // Now that all of the locks are released and the decoder is shut down, we can close the port
+        // Port closed
         await port.close();
-
-        // Set a bunch of variables and disable the appropriate DOM elements
         portOpen = false;
         document.getElementById("openclose_port").innerText = "Open";
         document.getElementById("term_input").disabled = true;
         document.getElementById("send").disabled = true;
-        //document.getElementById("change").disabled = true;
+        document.getElementById("clear").disabled = true;
         document.getElementById("port_info").innerText = "Disconnected";
 
         console.log("port closed");
-
-        // Resolve the promise that we returned earlier. This helps other functions know the port status
         resolve();
-      })();
+      } catch (err) {
+        console.error("Port error:", err);
+        resolve();
+      }
     });
   }
-
-  return;
 }
 
-// Change settings that require a connection reset.
-// Currently this only applies to the baud rate
-async function changeSettings() {
-  holdPort = port; // stash the current SerialPort object
-  reader.cancel(); // force-close the current port
-  console.log("changing setting...");
-  console.log("waiting for port to close...");
-  await portPromise; // wait for the port to be closed
-  console.log("port closed, opening with new settings...");
-  openClose(); // open the port again (it will grab the new settings while opening the port)
-}
-
-// Send a string over the serial port.
-// This is easier than listening because we know when we're done sending
+// Send command with automatic XOR checksum
 async function sendString() {
-  let outString = document.getElementById("term_input").value; // get the string to send from the term_input textarea
-  document.getElementById("term_input").value = ""; // clear the term_input textarea for the next user input
+  const inputElem = document.getElementById("term_input");
+  let userInput = inputElem.value.trim().toUpperCase();
+  inputElem.value = ""; // clear input
 
-  // Get a text encoder, pipe it to the SerialPort object, and get a writer
-  //const textEncoder = new TextEncoderStream();
-  //const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
-  //const writer = textEncoder.writable.getWriter();
+  // Clean input: remove anything that's not 0-9A-F
+  const cleanHex = userInput.replace(/[^0-9A-F]/gi, "");
 
-  // write the outString to the writer
-  //await writer.write(outString);
-  
-  const writer = port.writable.getWriter();
+  if (cleanHex.length === 0 || cleanHex.length % 2 !== 0) {
+    document.getElementById("debug_window").value += "Invalid hex input (odd length or empty)\n";
+    return;
+  }
 
-  //const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]); //Request ASCII Status
-  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]); //Request FW Version
-  await writer.write(SerData);
-  
-  // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
-  document.getElementById("term_window").value += "\n>" + outString + "\n";
+  // Parse hex string into byte array and compute XOR
+  let xor = 0;
+  const bytes = [];
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    const byteStr = cleanHex.substring(i, i + 2);
+    const byte = parseInt(byteStr, 16);
+    bytes.push(byte);
+    xor ^= byte;
+  }
 
-  // close the writer since we're done sending for now
-  writer.close();
-  await writableStreamClosed;
+  // Append checksum
+  bytes.push(xor);
+
+  // Show what we're sending in debug window
+  const hexSent = bytes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+  document.getElementById("debug_window").value += `> ${hexSent}  (checksum = ${xor.toString(16).toUpperCase().padStart(2, "0")})\n`;
+  document.getElementById("debug_window").scrollTop = document.getElementById("debug_window").scrollHeight;
+
+  // Send raw bytes over serial
+  if (port && port.writable) {
+    const writer = port.writable.getWriter();
+    try {
+      const packet = new Uint8Array(bytes);
+      await writer.write(packet);
+      console.log("Sent:", hexSent);
+    } catch (err) {
+      console.error("Send failed:", err);
+      document.getElementById("debug_window").value += "Send error: " + err.message + "\n";
+    } finally {
+      writer.releaseLock();
+    }
+  } else {
+    document.getElementById("debug_window").value += "Not connected - cannot send\n";
+  }
+
+  // Optional: echo the original user input too
+  document.getElementById("term_window").value += "\n> " + userInput + "\n";
 }
 
-// Clear the contents of the term_window textarea
+// Clear terminals
 function clearTerminal() {
   document.getElementById("term_window").value = "";
   document.getElementById("debug_window").value = "";
 }
 
-// This function in bound to "keydown" in the term_input textarea.
-// It intercepts Enter keystrokes and calls the sendString function
+// Send on Enter key
 function detectEnter(e) {
-  var key = e.keyCode;
-
-  // If the user has pressed enter
-  if (key == 13) {
+  if (e.keyCode === 13) {
     e.preventDefault();
     sendString();
   }
-  return;
 }
