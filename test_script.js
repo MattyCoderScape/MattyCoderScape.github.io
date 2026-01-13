@@ -15,8 +15,7 @@ const csumResult  = document.getElementById("csum_result");
 const rxCountEl   = document.getElementById("rx_count");
 
 // Update UI states
-function updateUI() {
-  const connected = !!portOpen;
+function updateUI(connected = portOpen) {
   openBtn.textContent  = connected ? "Close" : "Open";
   portInfo.textContent = connected ? "Connected" : "Disconnected";
   sendBtn.disabled     = !connected;
@@ -26,9 +25,10 @@ function updateUI() {
 }
 
 window.onload = function () {
+  termWindow.value = "";   // no placeholder
+  rxByteCount = 0;
+  rxCountEl.textContent = "0 bytes received";
   updateUI();
-
-  termWindow.value = "";   // clear any initial placeholder
 
   // Listeners
   csumBtn.addEventListener("click", calculateCSUM);
@@ -60,7 +60,7 @@ function calculateCSUM() {
 
   let hex = val;
 
-  debugWindow.value += `\n[CSUM] "${hex}" (${hex.length/2 || 0} bytes)\n`;
+  debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
 
   if (hex.length === 0) {
     csumResult.value = "00";
@@ -75,7 +75,7 @@ function calculateCSUM() {
 
   let xor = 0;
   for (let i = 0; i < hex.length; i += 2) {
-    xor ^= parseInt(hex.substring(i, i+2), 16);
+    xor ^= parseInt(hex.substring(i, i + 2), 16);
   }
 
   const result = xor.toString(16).toUpperCase().padStart(2, '0');
@@ -105,17 +105,27 @@ async function togglePort() {
 
     portOpen = true;
     updateUI();
-    debugWindow.value += "Port opened\n";
 
+    const info = port.getInfo();
+
+    debugWindow.value += "Port opened\n";
+    debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbVersion:    ${info.usbVersion ?? 'undefined'}\n`;
+    debugWindow.value += `serialNumber:  ${info.serialNumber ?? 'undefined'}\n`;
+    debugWindow.value += `manufacturer:  ${info.manufacturer ?? 'undefined'}\n`;
+    debugWindow.value += `product:       ${info.product ?? 'undefined'}\n\n`;
+
+    // Read loop
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
 
       let bytesStr = "";
-      for (let b of value) {
+      value.forEach(b => {
         bytesStr += b.toString(16).toUpperCase().padStart(2, '0');
         rxByteCount++;
-      }
+      });
 
       termWindow.value += bytesStr;
       termWindow.scrollTop = termWindow.scrollHeight;
@@ -172,4 +182,3 @@ function detectEnter(e) {
 }
 
 updateUI();
-
