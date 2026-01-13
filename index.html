@@ -1,43 +1,33 @@
-HTML<!doctype html>
-<html class="no-js" lang="">
-
+<!doctype html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Web Serial CM5-LTS Tool</title>
-  <meta name="theme-color" content="#fafafa">
+  <title>CM5-LTS Serial Tool</title>
 </head>
-
 <body>
-    <div id="titleDiv">
-        <span id="title">Web Serial API Demo CM5-LTS</span>
-    </div>
-    <div id="outDiv">
-        <textarea id="term_window" readonly>Hello World!</textarea>
-    </div>
-    <div id="outDiv">
-        <textarea id="debug_window" readonly>Debug Window</textarea>
-    </div>
+  <h2>CM5-LTS Serial Tool 4</h2>
 
-    <div id="inDiv">
-        <textarea id="term_input" placeholder="Enter hex bytes here (e.g. c3050001b6)"></textarea>
-        <button id="send" disabled>Send</button>
-        <button id="clear" disabled>Clear</button>
-    </div>
+  <textarea id="term_window" readonly rows="10" cols="60">Output will appear here</textarea><br><br>
 
-    <!-- CSUM moved here – BELOW the input field -->
-    <div id="csumDiv">
-        <button id="csum">CSUM</button>
-        <input id="csum_result" readonly size="2" placeholder="00">
-        <span style="font-size:0.9em; color:#666; margin-left:12px;">
-          Computes XOR checksum (click to uppercase + calculate)
-        </span>
-    </div>
+  <textarea id="debug_window" readonly rows="5" cols="60">Debug messages</textarea><br><br>
 
-    <div id="setDiv">
-        <button id="openclose_port">Open</button>
-        <span id="port_info">Disconnected</span>
-    </div>
+  <div>
+    <textarea id="term_input" rows="3" cols="60" placeholder="enter hex here e.g. c3050001b6"></textarea>
+  </div>
 
-  <script src="/test_script.js"></script>
+  <div style="margin: 10px 0;">
+    <button id="csum">CSUM</button>
+    <input id="csum_result" readonly size="3" value="00">
+    <span style="margin-left:10px;">(uppercases input + computes XOR)</span>
+  </div>
+
+  <div>
+    <button id="openclose_port">Open</button>
+    <button id="send" disabled>Send</button>
+    <button id="clear" disabled>Clear</button>
+    <span id="port_info" style="margin-left:20px;">Disconnected</span>
+  </div>
+
+  <script src="test_script.js"></script>
 </body>
 </html>
