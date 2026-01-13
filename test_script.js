@@ -156,7 +156,7 @@ async function sendData() {
   const writer = port.writable.getWriter();
   try {
     await writer.write(bytes);
-    debugWindow.value += `Sent: ${toSend.match(/.{1,2}/g).join(" ")}\n`;
+    debugWindow.value += `Sent: ${toSend}\n`;
   } catch (err) {
     debugWindow.value += `Send error: ${err.message}\n`;
   } finally {
@@ -172,3 +172,4 @@ function detectEnter(e) {
 }
 
 updateUI();
+
