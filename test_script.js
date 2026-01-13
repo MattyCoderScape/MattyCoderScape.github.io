@@ -2,7 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex";
+let displayMode = "hex";   // default
 
 const termInput   = document.getElementById("term_input");
 const sendBtn     = document.getElementById("send");
@@ -15,6 +15,7 @@ const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
 const rxCountEl   = document.getElementById("rx_count");
 
+// Update UI states
 function updateUI() {
   const connected = !!portOpen;
   openBtn.textContent  = connected ? "Close" : "Open";
@@ -30,7 +31,7 @@ function updateUI() {
   }
   
   sendBtn.disabled     = !connected;
-  termInput.disabled   = false;
+  termInput.disabled   = false;   // always enabled
   clearBtn.disabled    = false;
   csumBtn.disabled     = false;
 }
@@ -41,6 +42,7 @@ window.onload = function () {
   rxCountEl.textContent = "0 bytes received";
   updateUI();
 
+  // Listeners
   csumBtn.addEventListener("click", calculateCSUM);
   clearBtn.addEventListener("click", () => {
     termWindow.value = "";
@@ -99,8 +101,13 @@ function calculateCSUM() {
 
 async function togglePort() {
   if (portOpen) {
-    if (reader) await reader.cancel().catch(() => {});
-    if (port) await port.close().catch(() => {});
+    debugWindow.value += "Closing port...\n";
+    if (reader) {
+      await reader.cancel().catch(err => debugWindow.value += `Cancel error: ${err}\n`);
+    }
+    if (port) {
+      await port.close().catch(err => debugWindow.value += `Close error: ${err}\n`);
+    }
     port = null;
     reader = null;
     portOpen = false;
@@ -109,6 +116,7 @@ async function togglePort() {
     return;
   }
 
+  debugWindow.value += "Opening port...\n";
   try {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
@@ -125,9 +133,13 @@ async function togglePort() {
     debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
     debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
 
+    // Read loop
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) {
+        debugWindow.value += "Read loop ended\n";
+        break;
+      }
 
       let displayStr = "";
 
