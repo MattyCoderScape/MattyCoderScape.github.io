@@ -2,7 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex"; // default
+let displayMode = "hex";
 
 const termInput = document.getElementById("term_input");
 const sendBtn = document.getElementById("send");
@@ -182,3 +182,30 @@ function detectEnter(e) {
     sendData();
   }
 }
+updateUI();
+
+// Bridge for fw_update.js - added at the very bottom
+window.sendBytes = async function(bytes) {
+  if (!portOpen || !port?.writable) {
+    if (debugWindow) debugWindow.value += "Bridge: Cannot send - port not open\n";
+    throw new Error("Port not open for FW update");
+  }
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(bytes);
+    if (debugWindow) debugWindow.value += `Bridge: Sent ${bytes.length} bytes for FW\n`;
+  } catch (err) {
+    if (debugWindow) debugWindow.value += `Bridge send error: ${err.message}\n`;
+    throw err;
+  } finally {
+    writer.releaseLock();
+  }
+};
+
+window.getReader = function() {
+  if (!reader) {
+    if (debugWindow) debugWindow.value += "Bridge: No reader available\n";
+    throw new Error("No reader - port not open");
+  }
+  return reader;
+};
