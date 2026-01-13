@@ -12,24 +12,23 @@ const debugWindow = document.getElementById("debug_window");
 const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
 
-// Set initial UI state
-function resetUI() {
-  portOpen = false;
-  if (termInput)   termInput.disabled   = true;
-  if (sendBtn)     sendBtn.disabled     = true;
-  if (clearBtn)    clearBtn.disabled    = true;
-  if (openBtn)     openBtn.textContent  = "Open";
-  if (portInfo)    portInfo.textContent = "Disconnected";
-  if (debugWindow) debugWindow.value    = "Debug messages\n";
+// Update button states — input always enabled
+function updateUI() {
+  const connected = !!portOpen;
+  if (openBtn)     openBtn.textContent  = connected ? "Close" : "Open";
+  if (portInfo)    portInfo.textContent = connected ? "Connected" : "Disconnected";
+  if (sendBtn)     sendBtn.disabled     = !connected;
+  if (clearBtn)    clearBtn.disabled    = false;
+  if (csumBtn)     csumBtn.disabled     = false;
+  if (termInput)   termInput.disabled   = false;   // always usable
 }
 
 window.onload = function () {
-  if (!("serial" in navigator)) {
-    alert("Web Serial API not supported in this browser.\nCSUM tool still works.");
-  }
+  resetDebug();
 
-  resetUI();
+  updateUI();
 
+  // Event listeners
   if (csumBtn)     csumBtn.addEventListener("click", calculateCSUM);
   if (clearBtn)    clearBtn.addEventListener("click", clearTerminal);
   if (openBtn)     openBtn.addEventListener("click", togglePort);
@@ -39,25 +38,29 @@ window.onload = function () {
     termInput.addEventListener("input", liveCleanInput);
   }
 
-  // Optional prefill from URL
+  // Optional URL prefill
   const params = new URLSearchParams(window.location.search);
   const prefill = params.get("prefill");
   if (prefill && termInput) termInput.value = prefill;
 };
 
+function resetDebug() {
+  if (debugWindow) debugWindow.value = "Debug messages\n";
+}
+
 function liveCleanInput() {
   const el = termInput;
+  if (!el) return;
   let val = el.value.replace(/[^0-9A-Fa-f]/gi, '');
   if (val !== el.value) el.value = val;
-  el.style.borderColor = (val.length % 2) ? "#FF9800" : "";
+  el.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
 }
 
 function calculateCSUM() {
   if (!termInput || !csumResult) return;
 
-  // Uppercase + clean
   let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
-  termInput.value = val;   // ← this line makes it uppercase
+  termInput.value = val;
 
   let hex = val;
 
@@ -69,14 +72,14 @@ function calculateCSUM() {
   }
 
   if (hex.length % 2 !== 0) {
-    debugWindow.value += "→ Odd length, ignoring\n";
+    debugWindow.value += "→ Odd length\n";
     alert("Odd number of hex digits");
     return;
   }
 
   let xor = 0;
   for (let i = 0; i < hex.length; i += 2) {
-    xor ^= parseInt(hex.substring(i, i+2), 16);
+    xor ^= parseInt(hex.substring(i, i + 2), 16);
   }
 
   const result = xor.toString(16).toUpperCase().padStart(2, '0');
@@ -89,7 +92,10 @@ async function togglePort() {
     // Close
     if (reader) await reader.cancel().catch(() => {});
     if (port) await port.close().catch(() => {});
-    resetUI();
+    port = null;
+    reader = null;
+    portOpen = false;
+    updateUI();
     debugWindow.value += "Port closed\n";
     return;
   }
@@ -104,12 +110,7 @@ async function togglePort() {
     reader = port.readable.getReader();
 
     portOpen = true;
-    openBtn.textContent = "Close";
-    termInput.disabled = false;
-    sendBtn.disabled = false;
-    clearBtn.disabled = false;
-    portInfo.textContent = "Connected";
-
+    updateUI();
     debugWindow.value += "Port opened\n";
 
     // Read loop
@@ -123,13 +124,14 @@ async function togglePort() {
     }
   } catch (err) {
     debugWindow.value += `Open failed: ${err.message}\n`;
-    resetUI();
+    portOpen = false;
+    updateUI();
   }
 }
 
 async function sendData() {
   if (!portOpen || !port?.writable) {
-    debugWindow.value += "Cannot send – port not open\n";
+    debugWindow.value += "Cannot send – no port open\n";
     return;
   }
 
@@ -139,11 +141,10 @@ async function sendData() {
     return;
   }
   if (hex.length % 2 !== 0) {
-    debugWindow.value += "Odd hex length – cannot send\n";
+    debugWindow.value += "Odd hex length\n";
     return;
   }
 
-  // Append checksum if valid
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
     toSend += csumResult.value;
@@ -176,3 +177,6 @@ function detectEnter(e) {
     sendData();
   }
 }
+
+// Initial UI update
+updateUI();
