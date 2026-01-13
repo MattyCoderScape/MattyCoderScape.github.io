@@ -2,50 +2,45 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex"; // default
+let displayMode = "hex";   // default
 
-const termInput = document.getElementById("term_input");
-const sendBtn = document.getElementById("send");
-const clearBtn = document.getElementById("clear");
-const openBtn = document.getElementById("openclose_port");
-const portInfo = document.getElementById("port_info");
-const termWindow = document.getElementById("term_window");
+const termInput   = document.getElementById("term_input");
+const sendBtn     = document.getElementById("send");
+const clearBtn    = document.getElementById("clear");
+const openBtn     = document.getElementById("openclose_port");
+const portInfo    = document.getElementById("port_info");
+const termWindow  = document.getElementById("term_window");
 const debugWindow = document.getElementById("debug_window");
-const csumBtn = document.getElementById("csum");
-const csumResult = document.getElementById("csum_result");
-const rxCountEl = document.getElementById("rx_count");
+const csumBtn     = document.getElementById("csum");
+const csumResult  = document.getElementById("csum_result");
+const rxCountEl   = document.getElementById("rx_count");
 
 // Update UI states
 function updateUI(connected = portOpen) {
-  // Always set text first
-  portInfo.textContent = connected ? "Connected" : "Disconnected";
-
-  // Apply classes for color
+  openBtn.textContent  = connected ? "Close" : "Open";
+  
   if (connected) {
+    portInfo.textContent = "Connected";
     portInfo.classList.remove("disconnected");
     portInfo.classList.add("connected");
   } else {
+    portInfo.textContent = "Disconnected";
     portInfo.classList.remove("connected");
     portInfo.classList.add("disconnected");
   }
-
-  openBtn.textContent = connected ? "Close" : "Open";
-  sendBtn.disabled = !connected;
-  termInput.disabled = false; // always enabled
-  clearBtn.disabled = false;
-  csumBtn.disabled = false;
+  
+  sendBtn.disabled     = !connected;
+  termInput.disabled   = false;
+  clearBtn.disabled    = false;
+  csumBtn.disabled     = false;
 }
 
 window.onload = function () {
-  // Force initial UI state immediately
-  updateUI(false); // start disconnected
-
   termWindow.value = "";
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
-  debugWindow.value = "Debug messages\n";
+  updateUI();
 
-  // Listeners
   csumBtn.addEventListener("click", calculateCSUM);
   clearBtn.addEventListener("click", () => {
     termWindow.value = "";
@@ -65,9 +60,6 @@ window.onload = function () {
   const params = new URLSearchParams(window.location.search);
   const prefill = params.get("prefill");
   if (prefill) termInput.value = prefill;
-
-  // Final safety call to ensure UI is correct
-  updateUI(false);
 };
 
 function liveCleanInput() {
@@ -90,7 +82,7 @@ function calculateCSUM() {
   }
 
   if (hex.length % 2 !== 0) {
-    debugWindow.value += "→ Odd length\n";
+    debugWindow.value += "? Odd length\n";
     alert("Odd number of hex digits");
     return;
   }
@@ -102,18 +94,13 @@ function calculateCSUM() {
 
   const result = xor.toString(16).toUpperCase().padStart(2, '0');
   csumResult.value = result;
-  debugWindow.value += `→ CSUM = ${result}\n`;
+  debugWindow.value += `? CSUM = ${result}\n`;
 }
 
 async function togglePort() {
   if (portOpen) {
-    debugWindow.value += "Closing port...\n";
-    try {
-      if (reader) await reader.cancel();
-      if (port) await port.close();
-    } catch (err) {
-      debugWindow.value += `Close error: ${err.message}\n`;
-    }
+    if (reader) await reader.cancel().catch(() => {});
+    if (port) await port.close().catch(() => {});
     port = null;
     reader = null;
     portOpen = false;
@@ -122,7 +109,6 @@ async function togglePort() {
     return;
   }
 
-  debugWindow.value += "Opening port...\n";
   try {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
@@ -136,10 +122,9 @@ async function togglePort() {
 
     const info = port.getInfo();
     debugWindow.value += "Port opened\n";
-    debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
+    debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
 
-    // Read loop
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -186,9 +171,10 @@ async function sendData() {
     return;
   }
 
+  // Reset for new command
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
-  termWindow.value = "";
+  termWindow.value = "";   // clear previous received data
 
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
@@ -217,5 +203,4 @@ function detectEnter(e) {
   }
 }
 
-// Force initial UI on load
 updateUI();
