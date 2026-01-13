@@ -110,11 +110,7 @@ async function togglePort() {
 
     debugWindow.value += "Port opened\n";
     debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbVersion:    ${info.usbVersion ?? 'undefined'}\n`;
-    debugWindow.value += `serialNumber:  ${info.serialNumber ?? 'undefined'}\n`;
-    debugWindow.value += `manufacturer:  ${info.manufacturer ?? 'undefined'}\n`;
-    debugWindow.value += `product:       ${info.product ?? 'undefined'}\n\n`;
+    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
 
     // Read loop
     while (true) {
@@ -153,6 +149,10 @@ async function sendData() {
     debugWindow.value += "Odd hex length\n";
     return;
   }
+
+  // Reset counter for this new command
+  rxByteCount = 0;
+  rxCountEl.textContent = "0 bytes received";
 
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
