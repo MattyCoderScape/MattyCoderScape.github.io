@@ -9,11 +9,17 @@
     label { font-weight: bold; display: block; margin-bottom: 4px; }
     .controls { margin: 15px 0; }
     .rx-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    #port_info {
+      font-weight: bold;
+      transition: color 0.3s ease;
+    }
+    #port_info.disconnected { color: #d32f2f; }
+    #port_info.connected    { color: #2e7d32; }
   </style>
 </head>
 <body>
 
-  <h2>CM5-LTS Serial Tool 1v7</h2>
+  <h2>CM5-LTS Serial Tool</h2>
 
   <label for="term_input">Send Bytes</label>
   <textarea id="term_input" rows="4" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
@@ -45,7 +51,7 @@
     <button id="openclose_port">Open</button>
     <button id="send" disabled>Send</button>
     <button id="clear">Clear</button>
-    <span id="port_info" style="margin-left: 30px; font-weight: bold;">Disconnected</span>
+    <span id="port_info" class="disconnected">Disconnected</span>
   </div>
 
   <script src="test_script.js"></script>
