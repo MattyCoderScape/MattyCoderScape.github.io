@@ -1,263 +1,201 @@
-let portOpen = false; // tracks whether a port is corrently open
-let portPromise; // promise used to wait until port succesfully closed
-let holdPort = null; // use this to park a SerialPort object when we change settings so that we don't need to ask the user to select it again
-let port; // current SerialPort object
-let reader; // current port reader object so we can call .cancel() on it to interrupt port reading
-//let cnt = 0;
+let portOpen = false;
+let portPromise;
+let holdPort = null;
+let port;
+let reader;
 
-// Do these things when the window is done loading
 window.onload = function () {
-  // Check to make sure we can actually do serial stuff
   if ("serial" in navigator) {
-    // The Web Serial API is supported.
-    // Connect event listeners to DOM elements
-    document
-      .getElementById("openclose_port")
-      .addEventListener("click", openClose);
-    //document.getElementById("change").addEventListener("click", changeSettings);
+    // Button listeners
+    document.getElementById("openclose_port").addEventListener("click", openClose);
     document.getElementById("clear").addEventListener("click", clearTerminal);
     document.getElementById("send").addEventListener("click", sendString);
-    document
-      .getElementById("term_input")
-      .addEventListener("keydown", detectEnter);
-    document
-      .getElementById("csum")
-      .addEventListener("click", calculateCSUM);
-    document
-      .getElementById("term_input")
-      .addEventListener("keydown", validateHexKey);
+    document.getElementById("term_input").addEventListener("keydown", detectEnter);
+    document.getElementById("csum").addEventListener("click", calculateCSUM);
 
-    // Clear the term_window textarea
+    // Hex input validation & live cleaning
+    document.getElementById("term_input").addEventListener("keydown", restrictToHex);
+    document.getElementById("term_input").addEventListener("input", liveHexValidate);
+
     clearTerminal();
 
-	// See if there's a prefill query string on the URL
-    const params = new Proxy(new URLSearchParams(window.location.search), {
-      get: (searchParams, prop) => searchParams.get(prop),
-    });
-    // Get the value of "some_key" in eg "https://example.com/?some_key=some_value"
-    let preFill = params.prefill; // "some_value"
-    if (preFill != null) {
-      // If there's a prefill string then pop it into the term_input textarea
+    // Handle prefill from URL ?prefill=...
+    const params = new URLSearchParams(window.location.search);
+    const preFill = params.get("prefill");
+    if (preFill) {
       document.getElementById("term_input").value = preFill;
     }
+
+    // Force correct initial disabled state
+    portOpen = false;
+    document.getElementById("term_input").disabled = true;
+    document.getElementById("send").disabled = true;
+    document.getElementById("clear").disabled = true;
+    document.getElementById("openclose_port").innerText = "Open";
+    document.getElementById("port_info").innerText = "Disconnected";
   } else {
-    // The Web Serial API is not supported.
-    // Warn the user that their browser won't do stupid serial tricks
-    alert("The Web Serial API is not supported by your browser");
+    alert("Web Serial API is not supported by your browser.\nCSUM tool still works though.");
+    document.getElementById("csum").addEventListener("click", calculateCSUM);
   }
 };
 
-// Validate key presses in term_input to allow only 0-9, A-F, a-f (hex digits)
-function validateHexKey(e) {
-  // Allow control keys (backspace, delete, arrows, etc.)
-  if (e.ctrlKey || e.metaKey || e.key.length > 1) return;
-
+// Block invalid keys (only allow hex + controls)
+function restrictToHex(e) {
+  if (e.ctrlKey || e.metaKey || e.key.length > 1) return; // allow paste, arrows, backspace, delete
   const char = e.key.toUpperCase();
   if (!/[0-9A-F]/.test(char)) {
     e.preventDefault();
   }
 }
 
-// Calculate running XOR checksum from term_input hex string
-function calculateCSUM() {
-  let input = document.getElementById("term_input").value.toUpperCase();
-
-  // Validate: only hex chars
-  if (!/^[0-9A-F]*$/.test(input)) {
-    alert("Invalid characters! Only 0-9 and A-F allowed.");
-    document.getElementById("term_input").value = "";
-    return;
+// Clean input live (paste, cut, drag-drop)
+function liveHexValidate() {
+  const el = document.getElementById("term_input");
+  let val = el.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+  if (val !== el.value) {
+    el.value = val;
   }
-
-  // Validate: even number of characters (for byte pairs)
-  if (input.length % 2 !== 0) {
-    alert("Odd number of characters! Must be even for valid bytes.");
-    document.getElementById("term_input").value = "";
-    return;
-  }
-
-  // Parse hex string to byte array
-  let bytes = [];
-  for (let i = 0; i < input.length; i += 2) {
-    bytes.push(parseInt(input.substr(i, 2), 16));
-  }
-
-  // Compute running XOR checksum
-  let csum = 0;
-  for (let b of bytes) {
-    csum ^= b;
-  }
-
-  // Display as 2-digit uppercase hex
-  document.getElementById("csum_result").value = csum.toString(16).toUpperCase().padStart(2, '0');
+  // Visual feedback for odd length
+  el.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
+  el.style.backgroundColor = (val.length % 2 !== 0) ? "#FFF3E0" : "";
 }
 
-// This function is bound to the "Open" button, which also becomes the "Close" button
-// and it detects which thing to do by checking the portOpen variable
+// Calculate running XOR checksum
+function calculateCSUM() {
+  const inputEl = document.getElementById("term_input");
+  const debugEl = document.getElementById("debug_window");
+  const resultEl = document.getElementById("csum_result");
+
+  let raw = (inputEl.value || "").trim().toUpperCase();
+
+  if (debugEl) {
+    debugEl.value += `\n[CSUM] Input: "${raw}"  (len: ${raw.length})\n`;
+  }
+
+  let hex = raw.replace(/[^0-9A-F]/g, '');
+
+  if (hex.length === 0) {
+    resultEl.value = "00";
+    resultEl.style.backgroundColor = "#E8F5E9";
+    if (debugEl) debugEl.value += "→ Empty input → 00\n";
+    return;
+  }
+
+  if (hex.length % 2 !== 0) {
+    alert("Odd number of hex digits (" + hex.length + "). Must be even (byte pairs).");
+    if (debugEl) debugEl.value += "→ Odd length → aborted\n";
+    return;
+  }
+
+  let xor = 0;
+  let bytes = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    const pair = hex.substring(i, i + 2);
+    const byte = parseInt(pair, 16);
+    bytes.push(byte);
+    xor ^= byte;
+  }
+
+  const result = xor.toString(16).toUpperCase().padStart(2, '0');
+  resultEl.value = result;
+  resultEl.style.backgroundColor = "#E0F7FA"; // light cyan on success
+
+  if (debugEl) {
+    debugEl.value += `→ ${bytes.length} bytes  → XOR = ${result}\n`;
+  }
+}
+
 async function openClose() {
-  // Is there a port open already?
   if (portOpen) {
-    // Port's open. Call reader.cancel() forces reader.read() to return done=true
-    // so that the read loop will break and close the port
-    reader.cancel();
-    console.log("attempt to close");
+    // Close
+    if (reader) reader.cancel();
   } else {
-    // No port is open so we should open one.
-    // We write a promise to the global portPromise var that resolves when the port is closed
-    portPromise = new Promise((resolve) => {
-      // Async anonymous function to open the port
-      (async () => {
-        const filters = [
-		{ usbVendorId: 0x0403, usbProductId: 0x6001 },
-		];
-		// Check to see if we've stashed a SerialPort object
-        if (holdPort == null) {
-          // If we haven't stashed a SerialPort then ask the user to select one
-          port = await navigator.serial.requestPort({ filters });
-        } else {
-          // If we have stashed a SerialPort then use it and clear the stash
+    // Open
+    portPromise = new Promise(async (resolve) => {
+      try {
+        const filters = [{ usbVendorId: 0x0403, usbProductId: 0x6001 }];
+
+        if (holdPort) {
           port = holdPort;
           holdPort = null;
+        } else {
+          port = await navigator.serial.requestPort({ filters });
         }
-        // Grab the currently selected baud rate from the drop down menu
-        //var baudSelected = parseInt(document.getElementById("baud_rate").value);
-        //await port.open({ baudRate: baudSelected });
-		await port.open({ baudRate: 9600 });
 
-        // Create a textDecoder stream and get its reader, pipe the port reader to it
-        //const textDecoder = new TextDecoderStream();
-        //reader = textDecoder.readable.getReader();
+        await port.open({ baudRate: 9600 });
+
         reader = port.readable.getReader();
-		
-		//const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
 
-        // If we've reached this point then we're connected to a serial port
-        // Set a bunch of variables and enable the appropriate DOM elements
         portOpen = true;
         document.getElementById("openclose_port").innerText = "Close";
         document.getElementById("term_input").disabled = false;
         document.getElementById("send").disabled = false;
         document.getElementById("clear").disabled = false;
-        //document.getElementById("change").disabled = false;
 
-        // NOT SUPPORTED BY ALL ENVIRONMENTS
-        // Get port info and display it to the user in the port_info span
-        let portInfo = port.getInfo();
+        const info = port.getInfo();
         document.getElementById("port_info").innerText =
-          "Connected to device with VID " +
-          "0x" + portInfo.usbVendorId.toString(16) +
-          " and PID " + "0x" +
-          portInfo.usbProductId.toString(16) + "Ver 30";
+          `Connected - VID: 0x${info.usbVendorId?.toString(16) || "?"} PID: 0x${info.usbProductId?.toString(16) || "?"}`;
 
-		//document.getElementById("debug_window").value += ("Expected Response:\n  3C 05 FA 04 10 \n");
-		
-        // Serial read loop. We'll stay here until the serial connection is ended externally or reader.cancel() is called
-        // It's OK to sit in a while(true) loop because this is an async function and it will not block while it's await-ing
-        // When reader.cancel() is called by another function, reader will be forced to return done=true and break the loop
+        // Read loop
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
-            reader.releaseLock(); // release the lock on the reader so the owner port can be closed
+            reader.releaseLock();
             break;
           }
-		  // value is a Uint8Array TypedArray Object.
-		  value.forEach((element) => document.getElementById("term_window").value += element.toString(16).toUpperCase().padStart(2,'0') + " ");
-		  
-          console.log(value);
+          value.forEach(byte => {
+            document.getElementById("term_window").value +=
+              byte.toString(16).toUpperCase().padStart(2, '0') + " ";
+          });
         }
-		
-		
-		//document.getElementById("debug_window").value += ("Counter: " + inner_cnt.toString(10) + "\n");
 
-        // If we've reached this point then we're closing the port
-        // first step to closing the port was releasing the lock on the reader
-        // we did this before exiting the read loop.
-        // That should have broken the textDecoder pipe and propagated an error up the chain
-        // which we catch when this promise resolves
-        
-		
-		//await readableStreamClosed.catch(() => {
-          /* Ignore the error */
-        //});
-		
-		
-        // Now that all of the locks are released and the decoder is shut down, we can close the port
         await port.close();
 
-        // Set a bunch of variables and disable the appropriate DOM elements
         portOpen = false;
         document.getElementById("openclose_port").innerText = "Open";
         document.getElementById("term_input").disabled = true;
         document.getElementById("send").disabled = true;
-        //document.getElementById("change").disabled = true;
+        document.getElementById("clear").disabled = true;
         document.getElementById("port_info").innerText = "Disconnected";
 
-        console.log("port closed");
-
-        // Resolve the promise that we returned earlier. This helps other functions know the port status
         resolve();
-      })();
+      } catch (err) {
+        console.error("Port open failed:", err);
+        alert("Failed to open port: " + err.message);
+        resolve();
+      }
     });
   }
-
-  return;
 }
 
-// Change settings that require a connection reset.
-// Currently this only applies to the baud rate
-async function changeSettings() {
-  holdPort = port; // stash the current SerialPort object
-  reader.cancel(); // force-close the current port
-  console.log("changing setting...");
-  console.log("waiting for port to close...");
-  await portPromise; // wait for the port to be closed
-  console.log("port closed, opening with new settings...");
-  openClose(); // open the port again (it will grab the new settings while opening the port)
-}
-
-// Send a string over the serial port.
-// This is easier than listening because we know when we're done sending
 async function sendString() {
-  let outString = document.getElementById("term_input").value; // get the string
-  document.getElementById("term_input").value = ""; // clear the term_input textarea for the next user input
+  if (!portOpen) return;
 
-  // Get a text encoder, pipe it to the SerialPort object, and get a writer
-  //const textEncoder = new TextEncoderStream();
-  //const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
-  //const writer = textEncoder.writable.getWriter();
-
-  // write the outString to the writer
-  //await writer.write(outString);
-  
   const writer = port.writable.getWriter();
+  try {
+    // You can change this line to send whatever is in the input field instead
+    // For now keeping your original firmware version request
+    const data = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]);
+    await writer.write(data);
 
-  //const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC2, 0x05]); //Request ASCII Status
-  const SerData = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xB6, 0x71]); //Request FW Version
-  await writer.write(SerData);
-  
-  // add the outgoing string to the term_window textarea on its own new line denoted by a ">"
-  document.getElementById("term_window").value += "\n>" + outString + "\n";
-
-  // close the writer since we're done sending for now
-  writer.close();
-  await writableStreamClosed;
+    const text = document.getElementById("term_input").value.trim();
+    if (text) {
+      document.getElementById("term_window").value += "\n> " + text + "\n";
+    }
+    document.getElementById("term_input").value = "";
+  } finally {
+    writer.releaseLock();
+  }
 }
 
-// Clear the contents of the term_window textarea
 function clearTerminal() {
   document.getElementById("term_window").value = "";
-  document.getElementById("debug_window").value = "";
+  document.getElementById("debug_window").value = "Debug Window\n";
 }
 
-// This function in bound to "keydown" in the term_input textarea.
-// It intercepts Enter keystrokes and calls the sendString function
 function detectEnter(e) {
-  var key = e.keyCode;
-
-  // If the user has pressed enter
-  if (key == 13) {
+  if (e.keyCode === 13) {
     e.preventDefault();
     sendString();
   }
-  return;
 }
