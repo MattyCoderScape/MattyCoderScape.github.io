@@ -1,5 +1,3 @@
-JavaScript// fw_update.js
-
 const fwUpdateBtn = document.getElementById('fw_update');
 const fwFileInput = document.getElementById('fw_file_input');
 const fwStatus = document.getElementById('fw_status');
