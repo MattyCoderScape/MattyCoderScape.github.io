@@ -2,6 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
+let displayMode = "hex";   // default
 
 const termInput   = document.getElementById("term_input");
 const sendBtn     = document.getElementById("send");
@@ -14,23 +15,21 @@ const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
 const rxCountEl   = document.getElementById("rx_count");
 
-// Update UI states
 function updateUI(connected = portOpen) {
   openBtn.textContent  = connected ? "Close" : "Open";
   portInfo.textContent = connected ? "Connected" : "Disconnected";
   sendBtn.disabled     = !connected;
-  termInput.disabled   = false;   // always enabled
+  termInput.disabled   = false;
   clearBtn.disabled    = false;
   csumBtn.disabled     = false;
 }
 
 window.onload = function () {
-  termWindow.value = "";   // no placeholder
+  termWindow.value = "";
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
   updateUI();
 
-  // Listeners
   csumBtn.addEventListener("click", calculateCSUM);
   clearBtn.addEventListener("click", () => {
     termWindow.value = "";
@@ -42,7 +41,11 @@ window.onload = function () {
   termInput.addEventListener("keydown", detectEnter);
   termInput.addEventListener("input", liveCleanInput);
 
-  // Optional URL prefill
+  document.getElementById("display_mode").addEventListener("change", (e) => {
+    displayMode = e.target.value;
+    debugWindow.value += `[Display mode set to ${displayMode} — applies to next received data]\n`;
+  });
+
   const params = new URLSearchParams(window.location.search);
   const prefill = params.get("prefill");
   if (prefill) termInput.value = prefill;
@@ -57,7 +60,6 @@ function liveCleanInput() {
 function calculateCSUM() {
   let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   termInput.value = val;
-
   let hex = val;
 
   debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
@@ -107,23 +109,31 @@ async function togglePort() {
     updateUI();
 
     const info = port.getInfo();
-
     debugWindow.value += "Port opened\n";
     debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
     debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
 
-    // Read loop
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
 
-      let bytesStr = "";
-      value.forEach(b => {
-        bytesStr += b.toString(16).toUpperCase().padStart(2, '0');
-        rxByteCount++;
-      });
+      let displayStr = "";
 
-      termWindow.value += bytesStr;
+      if (displayMode === "ascii") {
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        let text = decoder.decode(value, { stream: true });
+        text = text.replace(/\r\n/g, "\n");               // normalize line endings
+        text = text.replace(/[^\x20-\x7E\n]/g, ".");     // control chars → .
+        displayStr = text;
+      } else {
+        // HEX
+        value.forEach(b => {
+          displayStr += b.toString(16).toUpperCase().padStart(2, '0');
+          rxByteCount++;
+        });
+      }
+
+      termWindow.value += displayStr;
       termWindow.scrollTop = termWindow.scrollHeight;
       rxCountEl.textContent = `${rxByteCount} bytes received`;
     }
@@ -150,7 +160,6 @@ async function sendData() {
     return;
   }
 
-  // Reset counter for this new command
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
 
