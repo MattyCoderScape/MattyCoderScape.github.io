@@ -20,6 +20,12 @@ window.onload = function () {
     document
       .getElementById("term_input")
       .addEventListener("keydown", detectEnter);
+    document
+      .getElementById("csum")
+      .addEventListener("click", calculateCSUM);
+    document
+      .getElementById("term_input")
+      .addEventListener("keydown", validateHexKey);
 
     // Clear the term_window textarea
     clearTerminal();
@@ -40,6 +46,51 @@ window.onload = function () {
     alert("The Web Serial API is not supported by your browser");
   }
 };
+
+// Validate key presses in term_input to allow only 0-9, A-F, a-f (hex digits)
+function validateHexKey(e) {
+  // Allow control keys (backspace, delete, arrows, etc.)
+  if (e.ctrlKey || e.metaKey || e.key.length > 1) return;
+
+  const char = e.key.toUpperCase();
+  if (!/[0-9A-F]/.test(char)) {
+    e.preventDefault();
+  }
+}
+
+// Calculate running XOR checksum from term_input hex string
+function calculateCSUM() {
+  let input = document.getElementById("term_input").value.toUpperCase();
+
+  // Validate: only hex chars
+  if (!/^[0-9A-F]*$/.test(input)) {
+    alert("Invalid characters! Only 0-9 and A-F allowed.");
+    document.getElementById("term_input").value = "";
+    return;
+  }
+
+  // Validate: even number of characters (for byte pairs)
+  if (input.length % 2 !== 0) {
+    alert("Odd number of characters! Must be even for valid bytes.");
+    document.getElementById("term_input").value = "";
+    return;
+  }
+
+  // Parse hex string to byte array
+  let bytes = [];
+  for (let i = 0; i < input.length; i += 2) {
+    bytes.push(parseInt(input.substr(i, 2), 16));
+  }
+
+  // Compute running XOR checksum
+  let csum = 0;
+  for (let b of bytes) {
+    csum ^= b;
+  }
+
+  // Display as 2-digit uppercase hex
+  document.getElementById("csum_result").value = csum.toString(16).toUpperCase().padStart(2, '0');
+}
 
 // This function is bound to the "Open" button, which also becomes the "Close" button
 // and it detects which thing to do by checking the portOpen variable
@@ -167,7 +218,7 @@ async function changeSettings() {
 // Send a string over the serial port.
 // This is easier than listening because we know when we're done sending
 async function sendString() {
-  let outString = document.getElementById("term_input").value; // get the string to send from the term_input textarea
+  let outString = document.getElementById("term_input").value; // get the string
   document.getElementById("term_input").value = ""; // clear the term_input textarea for the next user input
 
   // Get a text encoder, pipe it to the SerialPort object, and get a writer
