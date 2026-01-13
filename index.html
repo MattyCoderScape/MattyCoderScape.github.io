@@ -2,34 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>CM5-LTS Serial Tool 6</title>
+  <title>CM5-LTS Serial Tool</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; line-height: 1.5; }
+    textarea { font-family: monospace; width: 100%; box-sizing: border-box; }
+    label { font-weight: bold; display: block; margin-bottom: 4px; }
+    .controls { margin: 15px 0; }
+    .rx-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  </style>
 </head>
-<body style="font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto;">
+<body>
 
-  <h2>CM5-LTS Serial Tool</h2>
+  <h2>CM5-LTS Serial Tool 1v7</h2>
 
-  <label for="term_input"><strong>Send Bytes</strong></label><br>
-  <textarea id="term_input" rows="4" cols="60" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea><br><br>
+  <label for="term_input">Send Bytes</label>
+  <textarea id="term_input" rows="4" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
 
-  <div style="margin: 10px 0;">
+  <div style="margin: 12px 0;">
     <button id="csum">CSUM</button>
     <input id="csum_result" readonly size="3" value="00">
   </div>
 
-  <label for="debug_window"><strong>Debug</strong></label><br>
-  <textarea id="debug_window" readonly rows="8" cols="60">Debug messages</textarea><br><br>
+  <label for="debug_window">Debug</label>
+  <textarea id="debug_window" readonly rows="10">Debug messages</textarea>
 
-  <div style="margin: 10px 0;">
+  <div class="rx-header">
     <strong>Received Bytes</strong>
-    <span id="rx_count" style="margin-left: 15px; color: #555;">0 bytes received</span>
+    <span id="rx_count" style="color: #555;">0 bytes received</span>
   </div>
-  <textarea id="term_window" readonly rows="12" cols="60"></textarea><br><br>
 
-  <div>
+  <div style="margin-bottom: 8px;">
+    <label for="display_mode" style="display: inline;">Display Data As:</label>
+    <select id="display_mode">
+      <option value="hex" selected>HEX</option>
+      <option value="ascii">ASCII</option>
+    </select>
+  </div>
+
+  <textarea id="term_window" readonly rows="14"></textarea>
+
+  <div class="controls">
     <button id="openclose_port">Open</button>
     <button id="send" disabled>Send</button>
     <button id="clear">Clear</button>
-    <span id="port_info" style="margin-left: 20px; font-weight: bold;">Disconnected</span>
+    <span id="port_info" style="margin-left: 30px; font-weight: bold;">Disconnected</span>
   </div>
 
   <script src="test_script.js"></script>
