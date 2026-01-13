@@ -1,5 +1,4 @@
-// fw_update.js — isolated firmware update logic
-// Does NOT touch any of the main serial code
+// fw_update.js — firmware update with safe simulation mode
 
 const fwUpdateBtn = document.getElementById('fw_update');
 const fwFileInput = document.getElementById('fw_file_input');
@@ -8,87 +7,107 @@ const fwProgress = document.getElementById('fw_progress');
 const fwProgressContainer = document.getElementById('fw_progress_container');
 
 let updateInProgress = false;
+let simulateMode = true; // CHANGE THIS TO false WHEN YOU ARE READY FOR REAL UPDATES
 
-if (fwUpdateBtn) {
-  fwUpdateBtn.addEventListener('click', () => {
-    if (updateInProgress) {
-      fwStatus.textContent = 'Update already in progress';
-      return;
-    }
-    if (!portOpen) {
-      fwStatus.textContent = 'Port must be open first';
-      return;
-    }
-    fwFileInput.click();
-  });
-}
+fwUpdateBtn.addEventListener('click', () => {
+  if (updateInProgress) {
+    fwStatus.textContent = 'Update already in progress';
+    return;
+  }
+  if (!simulateMode && !portOpen) {
+    fwStatus.textContent = 'Port must be open first (or enable simulation mode)';
+    return;
+  }
+  fwFileInput.click();
+});
 
-if (fwFileInput) {
-  fwFileInput.addEventListener('change', async () => {
-    const file = fwFileInput.files[0];
-    if (!file) return;
+fwFileInput.addEventListener('change', async () => {
+  const file = fwFileInput.files[0];
+  if (!file) return;
 
-    // Enforce file extension
-    const ext = file.name.toLowerCase().split('.').pop();
-    if (ext !== 'hex' && ext !== 'tthex') {
-      fwStatus.textContent = 'Please select a .hex or .tthex file';
-      return;
-    }
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (ext !== 'hex' && ext !== 'tthex') {
+    fwStatus.textContent = 'Please select a .hex or .tthex file';
+    return;
+  }
 
-    updateInProgress = true;
-    fwStatus.textContent = 'Reading file...';
-    if (fwProgressContainer) fwProgressContainer.style.display = 'block';
-    if (fwProgress) fwProgress.value = 0;
+  updateInProgress = true;
+  fwStatus.textContent = 'Reading file...';
+  fwProgressContainer.style.display = 'block';
+  fwProgress.value = 0;
 
-    try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith(';') && !l.startsWith('#'));
+  try {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith(';') && !l.startsWith('#'));
 
-      fwStatus.textContent = `Sending ${lines.length} lines...`;
+    fwStatus.textContent = `Processing ${lines.length} lines (${simulateMode ? 'SIMULATION MODE' : 'LIVE'})...`;
 
-      // Send bootloader entry command (C3 05 00 01 C0 07)
+    if (!simulateMode) {
+      // Real mode: send bootloader entry
       const bootCmd = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
-      await sendBytes(bootCmd);  // Uses the global sendBytes from test_script.js
-      await delay(800);          // Give time for reset/bootloader init
+      await window.sendBytes(bootCmd);
+      debugWindow.value += "Sent bootloader entry command\n";
+      await delay(2000); // your requested 2000 ms reset wait
 
-      let lineIndex = 0;
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+      // Optional: log any early response from bootloader
+      const early = await waitForAnyData(500);
+      if (early.length > 0) {
+        debugWindow.value += `Bootloader early response: ${Array.from(early).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+      }
+    } else {
+      debugWindow.value += "SIMULATION: skipped bootloader entry, faking 2000 ms reset\n";
+      await delay(2000);
+    }
 
+    let lineIndex = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (!simulateMode) {
         const encoder = new TextEncoder();
         const lineBytes = encoder.encode(trimmed + '\r\n');
-
-        await sendBytes(lineBytes);
-
-        // Wait for ACK (0x06)
-        const ackReceived = await waitForACK(0x06, 3000);
-        if (!ackReceived) {
-          throw new Error(`No ACK received for line ${lineIndex + 1}`);
-        }
-
-        lineIndex++;
-        const progress = Math.round((lineIndex / lines.length) * 100);
-        if (fwProgress) fwProgress.value = progress;
-        fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${lines.length} lines)`;
-        await delay(30);
+        await window.sendBytes(lineBytes);
+      } else {
+        debugWindow.value += `SIMULATION: would send line ${lineIndex + 1}: ${trimmed}\n`;
       }
 
-      fwStatus.textContent = 'Firmware update complete';
-      if (fwProgress) fwProgress.value = 100;
+      // Wait for ACK (real or simulated)
+      let ackReceived;
+      if (!simulateMode) {
+        ackReceived = await waitForACK(0x06, 3000);
+      } else {
+        // Simulate ACK with random delay (300-800 ms)
+        await delay(300 + Math.random() * 500);
+        ackReceived = true; // always "succeed" in simulation
+        debugWindow.value += `SIMULATION: faked ACK for line ${lineIndex + 1}\n`;
+      }
 
-    } catch (err) {
-      fwStatus.textContent = 'Error: ' + err.message;
-      if (fwProgress) fwProgress.value = 0;
-    } finally {
-      updateInProgress = false;
-      if (fwProgressContainer) fwProgressContainer.style.display = 'none';
-      if (fwFileInput) fwFileInput.value = ''; // reset file input
+      if (!ackReceived) {
+        throw new Error(`No ACK for line ${lineIndex + 1}: ${trimmed}`);
+      }
+
+      lineIndex++;
+      const progress = Math.round((lineIndex / lines.length) * 100);
+      fwProgress.value = progress;
+      fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${lines.length} lines)`;
+      await delay(30);
     }
-  });
-}
 
-// Wait for a specific byte (ACK = 0x06) with timeout
+    fwStatus.textContent = `Firmware update complete (${simulateMode ? 'SIMULATED' : 'REAL'})`;
+    fwProgress.value = 100;
+
+  } catch (err) {
+    fwStatus.textContent = 'Error: ' + err.message;
+    fwProgress.value = 0;
+  } finally {
+    updateInProgress = false;
+    fwProgressContainer.style.display = 'none';
+    fwFileInput.value = '';
+  }
+});
+
+// Real ACK wait
 async function waitForACK(expectedByte, timeoutMs) {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(false), timeoutMs);
@@ -96,7 +115,7 @@ async function waitForACK(expectedByte, timeoutMs) {
     (async () => {
       try {
         while (true) {
-          const { value, done } = await reader.read();
+          const { value, done } = await window.getReader().read();
           if (done) break;
           for (let b of value) {
             if (b === expectedByte) {
@@ -111,6 +130,25 @@ async function waitForACK(expectedByte, timeoutMs) {
       } catch {
         clearTimeout(timeout);
         resolve(false);
+      }
+    })();
+  });
+}
+
+// Wait for any data (used during reset wait)
+async function waitForAnyData(timeoutMs) {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(new Uint8Array(0)), timeoutMs);
+
+    (async () => {
+      try {
+        const { value, done } = await window.getReader().read();
+        clearTimeout(timeout);
+        if (done || !value) resolve(new Uint8Array(0));
+        else resolve(value);
+      } catch {
+        clearTimeout(timeout);
+        resolve(new Uint8Array(0));
       }
     })();
   });
