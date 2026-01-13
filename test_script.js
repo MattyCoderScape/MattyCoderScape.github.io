@@ -54,33 +54,30 @@ function calculateCSUM() {
   const resultEl = document.getElementById("csum_result");
   const debugEl = document.getElementById("debug_window");
 
-  // 1. Uppercase + clean
-  let val = inputEl.value.toUpperCase().replace(/[^0-9A-F]/g, '');
-  inputEl.value = val;
+  // Force uppercase right away – very visible test
+  inputEl.value = "UPPERCASE_TEST_" + inputEl.value.toUpperCase();
 
-  let hex = val;
-  if (debugEl) debugEl.value += `\n[CSUM] "${hex}"  (len: ${hex.length})\n`;
+  // Then do normal cleaning (so you can still compute checksum)
+  let hex = inputEl.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+  
+  debugEl.value += `\n[CSUM clicked] After force uppercase: ${inputEl.value}\n`;
 
+  // Rest of your checksum calculation here...
   if (hex.length === 0) {
     resultEl.value = "00";
     return;
   }
-
   if (hex.length % 2 !== 0) {
-    alert("Odd number of hex digits – must be even.");
-    if (debugEl) debugEl.value += "→ Odd length – aborted\n";
+    alert("Odd length");
     return;
   }
 
   let xor = 0;
   for (let i = 0; i < hex.length; i += 2) {
-    xor ^= parseInt(hex.substring(i, i + 2), 16);
+    xor ^= parseInt(hex.substring(i, i+2), 16);
   }
 
-  const result = xor.toString(16).toUpperCase().padStart(2, '0');
-  resultEl.value = result;
-
-  if (debugEl) debugEl.value += `→ XOR = ${result}\n`;
+  resultEl.value = xor.toString(16).toUpperCase().padStart(2, '0');
 }
 
 async function sendString() {
@@ -197,3 +194,4 @@ function detectEnter(e) {
     sendString();
   }
 }
+
