@@ -1,5 +1,3 @@
-// fw_update.js
-
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
 const fwFileInput = document.getElementById('fw_file_input');
@@ -60,19 +58,44 @@ fwUpdateBtn.addEventListener('click', async () => {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      if (line.startsWith(':')) continue; // plain HEX OK
-      if (line.startsWith('|')) continue; // encrypted OK
+      if (line.startsWith(':')) continue;
+      if (line.startsWith('|')) continue;
       throw new Error(`Invalid line ${i + 1}: must start with ':' or '|'`);
     }
 
     fwStatus.textContent = `Sending ${lines.length} lines...`;
 
-    // Step 1: Enter bootloader mode
+    // Step 1: Send bootloader entry (C3 05 00 01 C0 07)
     const bootCmd = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
     await window.sendBytes(bootCmd);
     debugWindow.value += "Sent C0 bootloader entry command\n";
-    await delay(2000); // 2000 ms wait for reset
 
+    // Step 2: Wait 2000 ms for reset/bootloader init + log incoming bytes
+    fwStatus.textContent = 'Waiting for bootloader (2000 ms)...';
+    debugWindow.value += "Waiting 2000 ms for reset/bootloader - logging incoming bytes...\n";
+    let earlyBytes = new Uint8Array(0);
+    const startTime = Date.now();
+    while (Date.now() - startTime < 2000) {
+      try {
+        const { value, done } = await window.getReader().read();
+        if (done) break;
+        if (value) {
+          earlyBytes = new Uint8Array([...earlyBytes, ...value]);
+          debugWindow.value += `Received during wait: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+        }
+      } catch (err) {
+        debugWindow.value += `Error during wait: ${err.message}\n`;
+        break;
+      }
+      await delay(100);
+    }
+    if (earlyBytes.length > 0) {
+      debugWindow.value += `Total early response: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+    } else {
+      debugWindow.value += "No response during 2000 ms wait\n";
+    }
+
+    // Step 3: Line-by-line upload
     let lineIndex = 0;
     for (const line of lines) {
       const trimmed = line.trim();
@@ -81,16 +104,15 @@ fwUpdateBtn.addEventListener('click', async () => {
       const encoder = new TextEncoder();
       const lineBytes = encoder.encode(trimmed + '\r\n');
 
+      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
-      debugWindow.value += `Sent line ${lineIndex + 1}: ${trimmed}\n`;
 
-      // Wait for one of the 3 possible responses
       const response = await waitForAnyOf([0x06, 0x11, 0x13], 3000);
       if (response === null) {
         throw new Error(`No response (ACK/XON/XOFF) for line ${lineIndex + 1}`);
       }
 
-      debugWindow.value += `Received response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
+      debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
 
       lineIndex++;
       const progress = Math.round((lineIndex / lines.length) * 100);
@@ -101,21 +123,21 @@ fwUpdateBtn.addEventListener('click', async () => {
 
     fwStatus.textContent = 'Firmware update complete';
     fwProgress.value = 100;
+    debugWindow.value += "FW update complete\n";
 
   } catch (err) {
     fwStatus.textContent = 'Error: ' + err.message;
     fwProgress.value = 0;
+    debugWindow.value += `FW update error: ${err.message}\n`;
   } finally {
     updateInProgress = false;
     fwUpdateBtn.disabled = false;
     fwProgressContainer.style.display = 'none';
-    fwFileInput.value = '';
-    selectedFile = null;
-    fwFileName.textContent = 'No file selected';
+    // Keep filename visible
+    // fwFileInput.value = '';
   }
 });
 
-// Wait for any of multiple bytes (0x06, 0x11, 0x13)
 async function waitForAnyOf(expectedBytes, timeoutMs) {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(null), timeoutMs);
