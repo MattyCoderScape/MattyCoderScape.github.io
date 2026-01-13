@@ -54,48 +54,62 @@ fwUpdateBtn.addEventListener('click', async () => {
     const text = await selectedFile.text();
     const lines = text.split(/\r?\n/);
 
-    // Validate line prefixes
+    // Validate prefixes
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      if (line.startsWith(':')) continue;
-      if (line.startsWith('|')) continue;
+      if (line.startsWith(':') || line.startsWith('|')) continue;
       throw new Error(`Invalid line ${i + 1}: must start with ':' or '|'`);
     }
 
     fwStatus.textContent = `Sending ${lines.length} lines...`;
+    debugWindow.value += `FW update: ${lines.length} lines from ${selectedFile.name}\n`;
 
-    // Step 1: Send bootloader entry (C3 05 00 01 C0 07)
+    // 1. Send C0 entry command
+    debugWindow.value += "Sending C0 entry command...\n";
     const bootCmd = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
     await window.sendBytes(bootCmd);
-    debugWindow.value += "Sent C0 bootloader entry command\n";
+    debugWindow.value += "C0 command sent\n";
 
-    // Step 2: Wait 2000 ms for reset/bootloader init + log incoming bytes
-    fwStatus.textContent = 'Waiting for bootloader (2000 ms)...';
-    debugWindow.value += "Waiting 2000 ms for reset/bootloader - logging incoming bytes...\n";
+    // 2. Wait 3000 ms for reset, log every byte received
+    fwStatus.textContent = 'Waiting for bootloader (3000 ms)...';
+    debugWindow.value += "Waiting 3000 ms for reset/bootloader - capturing all incoming data...\n";
     let earlyBytes = new Uint8Array(0);
     const startTime = Date.now();
-    while (Date.now() - startTime < 2000) {
+    while (Date.now() - startTime < 3000) {
       try {
         const { value, done } = await window.getReader().read();
         if (done) break;
-        if (value) {
+        if (value && value.length > 0) {
           earlyBytes = new Uint8Array([...earlyBytes, ...value]);
-          debugWindow.value += `Received during wait: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+          debugWindow.value += `Received during wait (${value.length} bytes): ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
         }
       } catch (err) {
-        debugWindow.value += `Error during wait: ${err.message}\n`;
+        debugWindow.value += `Wait error: ${err.message}\n`;
         break;
       }
       await delay(100);
     }
     if (earlyBytes.length > 0) {
-      debugWindow.value += `Total early response: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+      debugWindow.value += `Total received during reset: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
     } else {
-      debugWindow.value += "No response during 2000 ms wait\n";
+      debugWindow.value += "No data received during 3000 ms wait\n";
     }
 
-    // Step 3: Line-by-line upload
+    // 3. Re-open port (reset often causes port drop/re-enumerate)
+    fwStatus.textContent = 'Re-opening port after reset...';
+    debugWindow.value += "Re-opening port after reset...\n";
+    try {
+      port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }] });
+      await port.open({ baudRate: 9600 });
+      reader = port.readable.getReader();
+      debugWindow.value += "Port re-opened successfully\n";
+    } catch (err) {
+      debugWindow.value += `Re-open failed: ${err.message}\n`;
+      throw err;
+    }
+
+    // 4. Line-by-line upload
     let lineIndex = 0;
     for (const line of lines) {
       const trimmed = line.trim();
@@ -107,7 +121,7 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      const response = await waitForAnyOf([0x06, 0x11, 0x13], 3000);
+      const response = await waitForAnyOf([0x06, 0x11, 0x13], 5000);
       if (response === null) {
         throw new Error(`No response (ACK/XON/XOFF) for line ${lineIndex + 1}`);
       }
@@ -133,8 +147,6 @@ fwUpdateBtn.addEventListener('click', async () => {
     updateInProgress = false;
     fwUpdateBtn.disabled = false;
     fwProgressContainer.style.display = 'none';
-    // Keep filename visible
-    // fwFileInput.value = '';
   }
 });
 
