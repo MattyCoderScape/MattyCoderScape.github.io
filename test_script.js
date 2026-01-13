@@ -2,23 +2,23 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex";   // default
+let displayMode = "hex"; // default
 
-const termInput   = document.getElementById("term_input");
-const sendBtn     = document.getElementById("send");
-const clearBtn    = document.getElementById("clear");
-const openBtn     = document.getElementById("openclose_port");
-const portInfo    = document.getElementById("port_info");
-const termWindow  = document.getElementById("term_window");
+const termInput = document.getElementById("term_input");
+const sendBtn = document.getElementById("send");
+const clearBtn = document.getElementById("clear");
+const openBtn = document.getElementById("openclose_port");
+const portInfo = document.getElementById("port_info");
+const termWindow = document.getElementById("term_window");
 const debugWindow = document.getElementById("debug_window");
-const csumBtn     = document.getElementById("csum");
-const csumResult  = document.getElementById("csum_result");
-const rxCountEl   = document.getElementById("rx_count");
+const csumBtn = document.getElementById("csum");
+const csumResult = document.getElementById("csum_result");
+const rxCountEl = document.getElementById("rx_count");
 
 // Update UI states
 function updateUI(connected = portOpen) {
-  openBtn.textContent  = connected ? "Close" : "Open";
-  
+  openBtn.textContent = connected ? "Close" : "Open";
+
   if (connected) {
     portInfo.textContent = "Connected";
     portInfo.classList.remove("disconnected");
@@ -28,11 +28,11 @@ function updateUI(connected = portOpen) {
     portInfo.classList.remove("connected");
     portInfo.classList.add("disconnected");
   }
-  
-  sendBtn.disabled     = !connected;
-  termInput.disabled   = false;
-  clearBtn.disabled    = false;
-  csumBtn.disabled     = false;
+
+  sendBtn.disabled = !connected;
+  termInput.disabled = false;
+  clearBtn.disabled = false;
+  csumBtn.disabled = false;
 }
 
 window.onload = function () {
@@ -71,30 +71,24 @@ function liveCleanInput() {
 function calculateCSUM() {
   let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   termInput.value = val;
-
   let hex = val;
-
   debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
-
   if (hex.length === 0) {
     csumResult.value = "00";
     return;
   }
-
   if (hex.length % 2 !== 0) {
-    debugWindow.value += "? Odd length\n";
+    debugWindow.value += "→ Odd length\n";
     alert("Odd number of hex digits");
     return;
   }
-
   let xor = 0;
   for (let i = 0; i < hex.length; i += 2) {
     xor ^= parseInt(hex.substring(i, i + 2), 16);
   }
-
   const result = xor.toString(16).toUpperCase().padStart(2, '0');
   csumResult.value = result;
-  debugWindow.value += `? CSUM = ${result}\n`;
+  debugWindow.value += `→ CSUM = ${result}\n`;
 }
 
 async function togglePort() {
@@ -108,29 +102,22 @@ async function togglePort() {
     debugWindow.value += "Port closed\n";
     return;
   }
-
   try {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
     });
-
     await port.open({ baudRate: 9600 });
     reader = port.readable.getReader();
-
     portOpen = true;
     updateUI();
-
     const info = port.getInfo();
     debugWindow.value += "Port opened\n";
-    debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
-
+    debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-
       let displayStr = "";
-
       if (displayMode === "ascii") {
         const decoder = new TextDecoder("utf-8", { fatal: false });
         let text = decoder.decode(value, { stream: true });
@@ -143,7 +130,6 @@ async function togglePort() {
           rxByteCount++;
         });
       }
-
       termWindow.value += displayStr;
       termWindow.scrollTop = termWindow.scrollHeight;
       rxCountEl.textContent = `${rxByteCount} bytes received`;
@@ -160,7 +146,6 @@ async function sendData() {
     debugWindow.value += "Cannot send – no port open\n";
     return;
   }
-
   let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   if (hex.length === 0) {
     debugWindow.value += "Nothing to send\n";
@@ -170,21 +155,16 @@ async function sendData() {
     debugWindow.value += "Odd hex length\n";
     return;
   }
-
-  // Reset for new command
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
-  termWindow.value = "";   // clear previous received data
-
+  termWindow.value = "";
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
     toSend += csumResult.value;
   }
-
   const bytes = new Uint8Array(
     toSend.match(/.{1,2}/g).map(b => parseInt(b, 16))
   );
-
   const writer = port.writable.getWriter();
   try {
     await writer.write(bytes);
@@ -202,5 +182,4 @@ function detectEnter(e) {
     sendData();
   }
 }
-
 updateUI();
