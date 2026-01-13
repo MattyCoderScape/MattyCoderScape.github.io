@@ -2,7 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex";   // default
+let displayMode = "hex";
 
 const termInput   = document.getElementById("term_input");
 const sendBtn     = document.getElementById("send");
@@ -15,8 +15,8 @@ const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
 const rxCountEl   = document.getElementById("rx_count");
 
-// Update UI states
-function updateUI(connected = portOpen) {
+function updateUI() {
+  const connected = !!portOpen;
   openBtn.textContent  = connected ? "Close" : "Open";
   
   if (connected) {
@@ -171,10 +171,9 @@ async function sendData() {
     return;
   }
 
-  // Reset for new command
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
-  termWindow.value = "";   // clear previous received data
+  termWindow.value = "";
 
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
