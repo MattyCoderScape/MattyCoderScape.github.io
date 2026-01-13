@@ -2,33 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>CM5-LTS Serial Tool</title>
+  <title>CM5-LTS Serial Tool 6</title>
 </head>
-<body>
-  <h2>CM5-LTS Serial Tool 5</h2>
+<body style="font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto;">
 
-  <textarea id="term_window" readonly rows="10" cols="60">Output will appear here</textarea><br><br>
+  <h2>CM5-LTS Serial Tool</h2>
 
-  <textarea id="debug_window" readonly rows="5" cols="60">Debug messages</textarea><br><br>
-
-  <div>
-    <textarea id="term_input" rows="3" cols="60" placeholder="enter hex here e.g. c3050001b6"></textarea>
-  </div>
+  <label for="term_input"><strong>Send Bytes</strong></label><br>
+  <textarea id="term_input" rows="4" cols="60" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea><br><br>
 
   <div style="margin: 10px 0;">
     <button id="csum">CSUM</button>
     <input id="csum_result" readonly size="3" value="00">
-    <span style="margin-left:10px;">(uppercases input + computes XOR)</span>
   </div>
+
+  <label for="debug_window"><strong>Debug</strong></label><br>
+  <textarea id="debug_window" readonly rows="8" cols="60">Debug messages</textarea><br><br>
+
+  <div style="margin: 10px 0;">
+    <strong>Received Bytes</strong>
+    <span id="rx_count" style="margin-left: 15px; color: #555;">0 bytes received</span>
+  </div>
+  <textarea id="term_window" readonly rows="12" cols="60"></textarea><br><br>
 
   <div>
     <button id="openclose_port">Open</button>
     <button id="send" disabled>Send</button>
-    <button id="clear" disabled>Clear</button>
-    <span id="port_info" style="margin-left:20px;">Disconnected</span>
+    <button id="clear">Clear</button>
+    <span id="port_info" style="margin-left: 20px; font-weight: bold;">Disconnected</span>
   </div>
 
   <script src="test_script.js"></script>
 </body>
 </html>
-
