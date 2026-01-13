@@ -1,48 +1,43 @@
-<!doctype html>
+HTML<!doctype html>
 <html class="no-js" lang="">
 
 <head>
   <meta charset="utf-8">
-  <title></title>
+  <title>Web Serial CM5-LTS Tool</title>
   <meta name="theme-color" content="#fafafa">
 </head>
 
 <body>
     <div id="titleDiv">
-        <span id="title">Web Serial API Demo CM5-LTS 3</span>
+        <span id="title">Web Serial API Demo CM5-LTS</span>
     </div>
     <div id="outDiv">
         <textarea id="term_window" readonly>Hello World!</textarea>
     </div>
-	<div id="outDiv">
+    <div id="outDiv">
         <textarea id="debug_window" readonly>Debug Window</textarea>
     </div>
-    <div id="csumDiv">
-        <button id="csum">CSUM</button>
-        <input id="csum_result" readonly size="2" placeholder="00">
-    </div>
+
     <div id="inDiv">
-        <textarea id="term_input"></textarea>
+        <textarea id="term_input" placeholder="Enter hex bytes here (e.g. c3050001b6)"></textarea>
         <button id="send" disabled>Send</button>
         <button id="clear" disabled>Clear</button>
     </div>
+
+    <!-- CSUM moved here – BELOW the input field -->
+    <div id="csumDiv">
+        <button id="csum">CSUM</button>
+        <input id="csum_result" readonly size="2" placeholder="00">
+        <span style="font-size:0.9em; color:#666; margin-left:12px;">
+          Computes XOR checksum (click to uppercase + calculate)
+        </span>
+    </div>
+
     <div id="setDiv">
         <button id="openclose_port">Open</button>
-        <!--
-		<div>
-            <span>Baud Rate: </span>
-            <select id="baud_rate">
-                <option value="9600">9600</option>
-                <option value="19200">19200</option>
-                <option value="38400">38400</option>
-                <option value="57600">57600</option>
-                <option value="115200">115200</option>
-            </select><button id="change" disabled>Change</button>
-        </div>
-		-->
-		<span id="port_info">Disconnected</span>
+        <span id="port_info">Disconnected</span>
     </div>
+
   <script src="/test_script.js"></script>
 </body>
-
 </html>
