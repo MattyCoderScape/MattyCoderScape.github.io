@@ -1,74 +1,76 @@
-let portOpen = false;
-let portPromise;
-let holdPort = null;
 let port;
 let reader;
+let portOpen = false;
 
-window.onload = function () {
-  if ("serial" in navigator) {
-    document.getElementById("openclose_port").addEventListener("click", openClose);
-    document.getElementById("clear").addEventListener("click", clearTerminal);
-    document.getElementById("send").addEventListener("click", sendString);
-    document.getElementById("term_input").addEventListener("keydown", detectEnter);
-    document.getElementById("csum").addEventListener("click", calculateCSUM);
+const termInput   = document.getElementById("term_input");
+const sendBtn     = document.getElementById("send");
+const clearBtn    = document.getElementById("clear");
+const openBtn     = document.getElementById("openclose_port");
+const portInfo    = document.getElementById("port_info");
+const termWindow  = document.getElementById("term_window");
+const debugWindow = document.getElementById("debug_window");
+const csumBtn     = document.getElementById("csum");
+const csumResult  = document.getElementById("csum_result");
 
-    // Hex-only input + live cleaning
-    document.getElementById("term_input").addEventListener("keydown", restrictToHex);
-    document.getElementById("term_input").addEventListener("input", liveHexValidate);
-
-    clearTerminal();
-
-    const params = new URLSearchParams(window.location.search);
-    const preFill = params.get("prefill");
-    if (preFill) document.getElementById("term_input").value = preFill;
-
-    // Force clean initial state
-    portOpen = false;
-    document.getElementById("term_input").disabled = true;
-    document.getElementById("send").disabled = true;
-    document.getElementById("clear").disabled = true;
-    document.getElementById("openclose_port").innerText = "Open";
-    document.getElementById("port_info").innerText = "Disconnected";
-  } else {
-    alert("Web Serial not supported – CSUM still works.");
-    document.getElementById("csum").addEventListener("click", calculateCSUM);
-  }
-};
-
-function restrictToHex(e) {
-  if (e.ctrlKey || e.metaKey || e.key.length > 1) return;
-  if (!/[0-9A-Fa-f]/.test(e.key)) {
-    e.preventDefault();
-  }
+// Set initial UI state
+function resetUI() {
+  portOpen = false;
+  if (termInput)   termInput.disabled   = true;
+  if (sendBtn)     sendBtn.disabled     = true;
+  if (clearBtn)    clearBtn.disabled    = true;
+  if (openBtn)     openBtn.textContent  = "Open";
+  if (portInfo)    portInfo.textContent = "Disconnected";
+  if (debugWindow) debugWindow.value    = "Debug messages\n";
 }
 
-function liveHexValidate() {
-  const el = document.getElementById("term_input");
-  let val = el.value.replace(/[^0-9A-Fa-f]/g, '');
+window.onload = function () {
+  if (!("serial" in navigator)) {
+    alert("Web Serial API not supported in this browser.\nCSUM tool still works.");
+  }
+
+  resetUI();
+
+  if (csumBtn)     csumBtn.addEventListener("click", calculateCSUM);
+  if (clearBtn)    clearBtn.addEventListener("click", clearTerminal);
+  if (openBtn)     openBtn.addEventListener("click", togglePort);
+  if (sendBtn)     sendBtn.addEventListener("click", sendData);
+  if (termInput) {
+    termInput.addEventListener("keydown", detectEnter);
+    termInput.addEventListener("input", liveCleanInput);
+  }
+
+  // Optional prefill from URL
+  const params = new URLSearchParams(window.location.search);
+  const prefill = params.get("prefill");
+  if (prefill && termInput) termInput.value = prefill;
+};
+
+function liveCleanInput() {
+  const el = termInput;
+  let val = el.value.replace(/[^0-9A-Fa-f]/gi, '');
   if (val !== el.value) el.value = val;
-  el.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
+  el.style.borderColor = (val.length % 2) ? "#FF9800" : "";
 }
 
 function calculateCSUM() {
-  const inputEl = document.getElementById("term_input");
-  const resultEl = document.getElementById("csum_result");
-  const debugEl = document.getElementById("debug_window");
+  if (!termInput || !csumResult) return;
 
-  // Force uppercase right away – very visible test
-  inputEl.value = "UPPERCASE_TEST_" + inputEl.value.toUpperCase();
+  // Uppercase + clean
+  let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+  termInput.value = val;   // ← this line makes it uppercase
 
-  // Then do normal cleaning (so you can still compute checksum)
-  let hex = inputEl.value.toUpperCase().replace(/[^0-9A-F]/g, '');
-  
-  debugEl.value += `\n[CSUM clicked] After force uppercase: ${inputEl.value}\n`;
+  let hex = val;
 
-  // Rest of your checksum calculation here...
+  debugWindow.value += `\n[CSUM] "${hex}" (${hex.length} chars)\n`;
+
   if (hex.length === 0) {
-    resultEl.value = "00";
+    csumResult.value = "00";
     return;
   }
+
   if (hex.length % 2 !== 0) {
-    alert("Odd length");
+    debugWindow.value += "→ Odd length, ignoring\n";
+    alert("Odd number of hex digits");
     return;
   }
 
@@ -77,121 +79,100 @@ function calculateCSUM() {
     xor ^= parseInt(hex.substring(i, i+2), 16);
   }
 
-  resultEl.value = xor.toString(16).toUpperCase().padStart(2, '0');
+  const result = xor.toString(16).toUpperCase().padStart(2, '0');
+  csumResult.value = result;
+  debugWindow.value += `→ XOR = ${result}\n`;
 }
 
-async function sendString() {
-  if (!portOpen) {
-    alert("Port not open.");
+async function togglePort() {
+  if (portOpen) {
+    // Close
+    if (reader) await reader.cancel().catch(() => {});
+    if (port) await port.close().catch(() => {});
+    resetUI();
+    debugWindow.value += "Port closed\n";
     return;
   }
 
-  const inputEl = document.getElementById("term_input");
-  const csumEl = document.getElementById("csum_result");
-  let hexStr = inputEl.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+  // Open
+  try {
+    port = await navigator.serial.requestPort({
+      filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
+    });
 
-  if (hexStr.length === 0) {
-    alert("Nothing to send.");
+    await port.open({ baudRate: 9600 });
+    reader = port.readable.getReader();
+
+    portOpen = true;
+    openBtn.textContent = "Close";
+    termInput.disabled = false;
+    sendBtn.disabled = false;
+    clearBtn.disabled = false;
+    portInfo.textContent = "Connected";
+
+    debugWindow.value += "Port opened\n";
+
+    // Read loop
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      let line = "";
+      value.forEach(b => line += b.toString(16).toUpperCase().padStart(2,'0') + " ");
+      termWindow.value += line.trim() + "\n";
+      termWindow.scrollTop = termWindow.scrollHeight;
+    }
+  } catch (err) {
+    debugWindow.value += `Open failed: ${err.message}\n`;
+    resetUI();
+  }
+}
+
+async function sendData() {
+  if (!portOpen || !port?.writable) {
+    debugWindow.value += "Cannot send – port not open\n";
     return;
   }
 
-  if (hexStr.length % 2 !== 0) {
-    alert("Odd number of hex digits – cannot send.");
+  let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+  if (hex.length === 0) {
+    debugWindow.value += "Nothing to send\n";
+    return;
+  }
+  if (hex.length % 2 !== 0) {
+    debugWindow.value += "Odd hex length – cannot send\n";
     return;
   }
 
-  // Append checksum if it looks valid (not just placeholder)
-  let fullHex = hexStr;
-  if (csumEl.value && csumEl.value !== "00" && csumEl.value.length === 2) {
-    fullHex += csumEl.value;
+  // Append checksum if valid
+  let toSend = hex;
+  if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
+    toSend += csumResult.value;
   }
 
-  // Convert to byte array
-  const bytes = [];
-  for (let i = 0; i < fullHex.length; i += 2) {
-    bytes.push(parseInt(fullHex.substring(i, i + 2), 16));
-  }
+  const bytes = new Uint8Array(
+    toSend.match(/.{1,2}/g).map(b => parseInt(b, 16))
+  );
 
   const writer = port.writable.getWriter();
   try {
-    await writer.write(new Uint8Array(bytes));
-
-    // Show what was sent
-    document.getElementById("term_window").value += 
-      "\n> " + fullHex.match(/.{2}/g).join(" ") + "\n";
-
-    // Optional: clear input after send
-    // inputEl.value = "";
+    await writer.write(bytes);
+    termWindow.value += "> " + toSend.match(/.{1,2}/g).join(" ") + "\n";
+    termWindow.scrollTop = termWindow.scrollHeight;
+    debugWindow.value += `Sent: ${toSend}\n`;
   } catch (err) {
-    console.error("Send failed:", err);
+    debugWindow.value += `Send error: ${err.message}\n`;
   } finally {
     writer.releaseLock();
   }
 }
 
-async function openClose() {
-  if (portOpen) {
-    if (reader) reader.cancel();
-    return;
-  }
-
-  portPromise = new Promise(async (resolve) => {
-    try {
-      const filters = [{ usbVendorId: 0x0403, usbProductId: 0x6001 }];
-      port = holdPort ? holdPort : await navigator.serial.requestPort({ filters });
-      holdPort = null;
-
-      await port.open({ baudRate: 9600 });
-      reader = port.readable.getReader();
-
-      portOpen = true;
-      document.getElementById("openclose_port").innerText = "Close";
-      document.getElementById("term_input").disabled = false;
-      document.getElementById("send").disabled = false;
-      document.getElementById("clear").disabled = false;
-
-      let info = port.getInfo();
-      document.getElementById("port_info").innerText = 
-        `Connected – VID:0x${(info.usbVendorId||0).toString(16)} PID:0x${(info.usbProductId||0).toString(16)}`;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          reader.releaseLock();
-          break;
-        }
-        let s = "";
-        value.forEach(b => s += b.toString(16).toUpperCase().padStart(2,'0') + " ");
-        document.getElementById("term_window").value += s;
-      }
-
-      await port.close();
-
-      portOpen = false;
-      document.getElementById("openclose_port").innerText = "Open";
-      document.getElementById("term_input").disabled = true;
-      document.getElementById("send").disabled = true;
-      document.getElementById("clear").disabled = true;
-      document.getElementById("port_info").innerText = "Disconnected";
-
-      resolve();
-    } catch (err) {
-      console.error(err);
-      alert("Port error: " + err.message);
-      resolve();
-    }
-  });
-}
-
 function clearTerminal() {
-  document.getElementById("term_window").value = "";
-  document.getElementById("debug_window").value = "Debug Window\n";
+  if (termWindow) termWindow.value = "";
 }
 
 function detectEnter(e) {
   if (e.keyCode === 13) {
     e.preventDefault();
-    sendString();
+    sendData();
   }
 }
-
