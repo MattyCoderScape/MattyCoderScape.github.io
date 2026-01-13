@@ -2,45 +2,48 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex";   // default
+let displayMode = "hex"; // default
 
-const termInput   = document.getElementById("term_input");
-const sendBtn     = document.getElementById("send");
-const clearBtn    = document.getElementById("clear");
-const openBtn     = document.getElementById("openclose_port");
-const portInfo    = document.getElementById("port_info");
-const termWindow  = document.getElementById("term_window");
+const termInput = document.getElementById("term_input");
+const sendBtn = document.getElementById("send");
+const clearBtn = document.getElementById("clear");
+const openBtn = document.getElementById("openclose_port");
+const portInfo = document.getElementById("port_info");
+const termWindow = document.getElementById("term_window");
 const debugWindow = document.getElementById("debug_window");
-const csumBtn     = document.getElementById("csum");
-const csumResult  = document.getElementById("csum_result");
-const rxCountEl   = document.getElementById("rx_count");
+const csumBtn = document.getElementById("csum");
+const csumResult = document.getElementById("csum_result");
+const rxCountEl = document.getElementById("rx_count");
 
 // Update UI states
-function updateUI() {
-  const connected = !!portOpen;
-  openBtn.textContent  = connected ? "Close" : "Open";
-  
+function updateUI(connected = portOpen) {
+  // Always set text first
+  portInfo.textContent = connected ? "Connected" : "Disconnected";
+
+  // Apply classes for color
   if (connected) {
-    portInfo.textContent = "Connected";
     portInfo.classList.remove("disconnected");
     portInfo.classList.add("connected");
   } else {
-    portInfo.textContent = "Disconnected";
     portInfo.classList.remove("connected");
     portInfo.classList.add("disconnected");
   }
-  
-  sendBtn.disabled     = !connected;
-  termInput.disabled   = false;   // always enabled
-  clearBtn.disabled    = false;
-  csumBtn.disabled     = false;
+
+  openBtn.textContent = connected ? "Close" : "Open";
+  sendBtn.disabled = !connected;
+  termInput.disabled = false; // always enabled
+  clearBtn.disabled = false;
+  csumBtn.disabled = false;
 }
 
 window.onload = function () {
+  // Force initial UI state immediately
+  updateUI(false); // start disconnected
+
   termWindow.value = "";
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
-  updateUI();
+  debugWindow.value = "Debug messages\n";
 
   // Listeners
   csumBtn.addEventListener("click", calculateCSUM);
@@ -62,6 +65,9 @@ window.onload = function () {
   const params = new URLSearchParams(window.location.search);
   const prefill = params.get("prefill");
   if (prefill) termInput.value = prefill;
+
+  // Final safety call to ensure UI is correct
+  updateUI(false);
 };
 
 function liveCleanInput() {
@@ -102,11 +108,11 @@ function calculateCSUM() {
 async function togglePort() {
   if (portOpen) {
     debugWindow.value += "Closing port...\n";
-    if (reader) {
-      await reader.cancel().catch(err => debugWindow.value += `Cancel error: ${err}\n`);
-    }
-    if (port) {
-      await port.close().catch(err => debugWindow.value += `Close error: ${err}\n`);
+    try {
+      if (reader) await reader.cancel();
+      if (port) await port.close();
+    } catch (err) {
+      debugWindow.value += `Close error: ${err.message}\n`;
     }
     port = null;
     reader = null;
@@ -130,16 +136,13 @@ async function togglePort() {
 
     const info = port.getInfo();
     debugWindow.value += "Port opened\n";
-    debugWindow.value += `usbVendorId:   ${info.usbVendorId ?? 'undefined'}  (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbProductId:  ${info.usbProductId ?? 'undefined'}  (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
+    debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
 
     // Read loop
     while (true) {
       const { value, done } = await reader.read();
-      if (done) {
-        debugWindow.value += "Read loop ended\n";
-        break;
-      }
+      if (done) break;
 
       let displayStr = "";
 
@@ -214,4 +217,5 @@ function detectEnter(e) {
   }
 }
 
+// Force initial UI on load
 updateUI();
