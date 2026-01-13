@@ -2,7 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex";
+let displayMode = "hex"; // default
 
 const termInput = document.getElementById("term_input");
 const sendBtn = document.getElementById("send");
@@ -182,4 +182,3 @@ function detectEnter(e) {
     sendData();
   }
 }
-updateUI();
