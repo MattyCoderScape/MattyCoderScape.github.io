@@ -2,7 +2,7 @@ let port;
 let reader;
 let portOpen = false;
 let rxByteCount = 0;
-let displayMode = "hex"; // default
+let displayMode = "hex";
 
 const termInput = document.getElementById("term_input");
 const sendBtn = document.getElementById("send");
