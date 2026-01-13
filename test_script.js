@@ -1,6 +1,7 @@
 let port;
 let reader;
 let portOpen = false;
+let rxByteCount = 0;
 
 const termInput   = document.getElementById("term_input");
 const sendBtn     = document.getElementById("send");
@@ -11,60 +12,55 @@ const termWindow  = document.getElementById("term_window");
 const debugWindow = document.getElementById("debug_window");
 const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
+const rxCountEl   = document.getElementById("rx_count");
 
-// Update button states — input always enabled
+// Update UI states
 function updateUI() {
   const connected = !!portOpen;
-  if (openBtn)     openBtn.textContent  = connected ? "Close" : "Open";
-  if (portInfo)    portInfo.textContent = connected ? "Connected" : "Disconnected";
-  if (sendBtn)     sendBtn.disabled     = !connected;
-  if (clearBtn)    clearBtn.disabled    = false;
-  if (csumBtn)     csumBtn.disabled     = false;
-  if (termInput)   termInput.disabled   = false;   // always usable
+  openBtn.textContent  = connected ? "Close" : "Open";
+  portInfo.textContent = connected ? "Connected" : "Disconnected";
+  sendBtn.disabled     = !connected;
+  termInput.disabled   = false;   // always enabled
+  clearBtn.disabled    = false;
+  csumBtn.disabled     = false;
 }
 
 window.onload = function () {
-  resetDebug();
-
   updateUI();
 
-  // Event listeners
-  if (csumBtn)     csumBtn.addEventListener("click", calculateCSUM);
-  if (clearBtn)    clearBtn.addEventListener("click", clearTerminal);
-  if (openBtn)     openBtn.addEventListener("click", togglePort);
-  if (sendBtn)     sendBtn.addEventListener("click", sendData);
-  if (termInput) {
-    termInput.addEventListener("keydown", detectEnter);
-    termInput.addEventListener("input", liveCleanInput);
-  }
+  termWindow.value = "";   // clear any initial placeholder
+
+  // Listeners
+  csumBtn.addEventListener("click", calculateCSUM);
+  clearBtn.addEventListener("click", () => {
+    termWindow.value = "";
+    rxByteCount = 0;
+    rxCountEl.textContent = "0 bytes received";
+  });
+  openBtn.addEventListener("click", togglePort);
+  sendBtn.addEventListener("click", sendData);
+  termInput.addEventListener("keydown", detectEnter);
+  termInput.addEventListener("input", liveCleanInput);
 
   // Optional URL prefill
   const params = new URLSearchParams(window.location.search);
   const prefill = params.get("prefill");
-  if (prefill && termInput) termInput.value = prefill;
+  if (prefill) termInput.value = prefill;
 };
 
-function resetDebug() {
-  if (debugWindow) debugWindow.value = "Debug messages\n";
-}
-
 function liveCleanInput() {
-  const el = termInput;
-  if (!el) return;
-  let val = el.value.replace(/[^0-9A-Fa-f]/gi, '');
-  if (val !== el.value) el.value = val;
-  el.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
+  let val = termInput.value.replace(/[^0-9A-Fa-f]/gi, '');
+  if (val !== termInput.value) termInput.value = val;
+  termInput.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
 }
 
 function calculateCSUM() {
-  if (!termInput || !csumResult) return;
-
   let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   termInput.value = val;
 
   let hex = val;
 
-  debugWindow.value += `\n[CSUM] "${hex}" (${hex.length} chars)\n`;
+  debugWindow.value += `\n[CSUM] "${hex}" (${hex.length/2 || 0} bytes)\n`;
 
   if (hex.length === 0) {
     csumResult.value = "00";
@@ -79,17 +75,16 @@ function calculateCSUM() {
 
   let xor = 0;
   for (let i = 0; i < hex.length; i += 2) {
-    xor ^= parseInt(hex.substring(i, i + 2), 16);
+    xor ^= parseInt(hex.substring(i, i+2), 16);
   }
 
   const result = xor.toString(16).toUpperCase().padStart(2, '0');
   csumResult.value = result;
-  debugWindow.value += `→ XOR = ${result}\n`;
+  debugWindow.value += `→ CSUM = ${result}\n`;
 }
 
 async function togglePort() {
   if (portOpen) {
-    // Close
     if (reader) await reader.cancel().catch(() => {});
     if (port) await port.close().catch(() => {});
     port = null;
@@ -100,7 +95,6 @@ async function togglePort() {
     return;
   }
 
-  // Open
   try {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
@@ -113,14 +107,19 @@ async function togglePort() {
     updateUI();
     debugWindow.value += "Port opened\n";
 
-    // Read loop
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      let line = "";
-      value.forEach(b => line += b.toString(16).toUpperCase().padStart(2,'0') + " ");
-      termWindow.value += line.trim() + "\n";
+
+      let bytesStr = "";
+      for (let b of value) {
+        bytesStr += b.toString(16).toUpperCase().padStart(2, '0');
+        rxByteCount++;
+      }
+
+      termWindow.value += bytesStr;
       termWindow.scrollTop = termWindow.scrollHeight;
+      rxCountEl.textContent = `${rxByteCount} bytes received`;
     }
   } catch (err) {
     debugWindow.value += `Open failed: ${err.message}\n`;
@@ -157,18 +156,12 @@ async function sendData() {
   const writer = port.writable.getWriter();
   try {
     await writer.write(bytes);
-    termWindow.value += "> " + toSend.match(/.{1,2}/g).join(" ") + "\n";
-    termWindow.scrollTop = termWindow.scrollHeight;
-    debugWindow.value += `Sent: ${toSend}\n`;
+    debugWindow.value += `Sent: ${toSend.match(/.{1,2}/g).join(" ")}\n`;
   } catch (err) {
     debugWindow.value += `Send error: ${err.message}\n`;
   } finally {
     writer.releaseLock();
   }
-}
-
-function clearTerminal() {
-  if (termWindow) termWindow.value = "";
 }
 
 function detectEnter(e) {
@@ -178,5 +171,4 @@ function detectEnter(e) {
   }
 }
 
-// Initial UI update
 updateUI();
