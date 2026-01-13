@@ -15,9 +15,20 @@ const csumBtn     = document.getElementById("csum");
 const csumResult  = document.getElementById("csum_result");
 const rxCountEl   = document.getElementById("rx_count");
 
+// Update UI states
 function updateUI(connected = portOpen) {
   openBtn.textContent  = connected ? "Close" : "Open";
-  portInfo.textContent = connected ? "Connected" : "Disconnected";
+  
+  if (connected) {
+    portInfo.textContent = "Connected";
+    portInfo.classList.remove("disconnected");
+    portInfo.classList.add("connected");
+  } else {
+    portInfo.textContent = "Disconnected";
+    portInfo.classList.remove("connected");
+    portInfo.classList.add("disconnected");
+  }
+  
   sendBtn.disabled     = !connected;
   termInput.disabled   = false;
   clearBtn.disabled    = false;
@@ -60,6 +71,7 @@ function liveCleanInput() {
 function calculateCSUM() {
   let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   termInput.value = val;
+
   let hex = val;
 
   debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
@@ -122,11 +134,10 @@ async function togglePort() {
       if (displayMode === "ascii") {
         const decoder = new TextDecoder("utf-8", { fatal: false });
         let text = decoder.decode(value, { stream: true });
-        text = text.replace(/\r\n/g, "\n");               // normalize line endings
-        text = text.replace(/[^\x20-\x7E\n]/g, ".");     // control chars → .
+        text = text.replace(/\r\n/g, "\n");
+        text = text.replace(/[^\x20-\x7E\n]/g, ".");
         displayStr = text;
       } else {
-        // HEX
         value.forEach(b => {
           displayStr += b.toString(16).toUpperCase().padStart(2, '0');
           rxByteCount++;
@@ -160,8 +171,10 @@ async function sendData() {
     return;
   }
 
+  // Reset for new command
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
+  termWindow.value = "";   // clear previous received data
 
   let toSend = hex;
   if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
