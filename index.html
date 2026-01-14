@@ -21,7 +21,7 @@
   </style>
 </head>
 <body>
-  <!-- Version stamp: index.html V15 -->
+  <!-- Version stamp: index.html V16 -->
   <div id="version_info">
     Files loaded: 
     <span id="html_ver">HTML (loading...)</span> | 
@@ -82,14 +82,12 @@
 
   <!-- Version display script – reads globals from the JS files -->
   <script>
-    window.addEventListener('load', () => {
-      const htmlVer = document.getElementById('html_ver');
-      const coreVer = document.getElementById('core_ver');
-      const fwVer   = document.getElementById('fw_ver');
+    window.HTML_VERSION = "16";
 
-      htmlVer.textContent = `HTML V${window.HTML_VERSION  || 'unknown'}`;
-      coreVer.textContent = `test_script.js V${window.TEST_SCRIPT_VERSION || 'unknown'}`;
-      fwVer.textContent   = `fw_update.js V${window.FW_UPDATE_VERSION   || 'unknown'}`;
+    window.addEventListener('load', () => {
+      document.getElementById('html_ver').textContent = `HTML V${window.HTML_VERSION}`;
+      document.getElementById('core_ver').textContent = `test_script.js V${window.TEST_SCRIPT_VERSION || 'unknown'}`;
+      document.getElementById('fw_ver').textContent   = `fw_update.js V${window.FW_UPDATE_VERSION   || 'unknown'}`;
     });
   </script>
 
