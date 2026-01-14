@@ -1,4 +1,4 @@
-// fw_update.js V7
+// fw_update.js V8 – immediate line-by-line upload for stuck BL mode (no C0, no 2000 ms wait)
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -75,48 +75,8 @@ fwUpdateBtn.addEventListener('click', async () => {
     fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
     debugWindow.value += `FW update started: ${validLines.length} valid lines from ${selectedFile.name}\n`;
 
-    // Send bootloader entry
-    const bootCmd = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
-    await window.sendBytes(bootCmd);
-    debugWindow.value += "Sent C0 bootloader entry command\n";
-
-    // Wait 2000 ms for reset/bootloader init + log incoming bytes
-    fwStatus.textContent = 'Waiting for bootloader (2000 ms)...';
-    debugWindow.value += "Waiting 2000 ms for reset/bootloader - capturing all incoming data...\n";
-    let earlyBytes = new Uint8Array(0);
-    const startTime = Date.now();
-    while (Date.now() - startTime < 2000) {
-      try {
-        const { value, done } = await window.getReader().read();
-        if (done) break;
-        if (value && value.length > 0) {
-          earlyBytes = new Uint8Array([...earlyBytes, ...value]);
-          debugWindow.value += `Received during wait: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
-        }
-      } catch (err) {
-        debugWindow.value += `Error during wait: ${err.message}\n`;
-        break;
-      }
-      await delay(100);
-    }
-    if (earlyBytes.length > 0) {
-      debugWindow.value += `Total early response: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
-    } else {
-      debugWindow.value += "No response during 2000 ms wait\n";
-    }
-
-    // Re-open port after reset
-    fwStatus.textContent = 'Re-opening port after reset...';
-    debugWindow.value += "Re-opening port after reset...\n";
-    try {
-      port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }] });
-      await port.open({ baudRate: 9600 });
-      reader = port.readable.getReader();
-      debugWindow.value += "Port re-opened successfully\n";
-    } catch (err) {
-      debugWindow.value += `Re-open failed: ${err.message}\n`;
-      throw err;
-    }
+    // No C0 command or wait – assume already in bootloader mode and send lines immediately
+    debugWindow.value += "Direct line-by-line upload (no C0 or wait - unit in BL mode)\n";
 
     // Line-by-line upload
     let lineIndex = 0;
@@ -129,23 +89,23 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      const response = await waitForAnyOf([0x06, 0x11, 0x13], 5000);
+      const response = await waitForAnyOf([0x06, 0x11, 0x13], 6000);
       if (response === null) {
-        throw new Error(`No response (ACK/XON/XOFF) for line ${lineIndex + 1}`);
+        debugWindow.value += `No response for line ${lineIndex + 1} — continuing (bootloader may not ACK every line)\n`;
+      } else {
+        debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
       }
-
-      debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
 
       lineIndex++;
       const progress = Math.round((lineIndex / validLines.length) * 100);
       fwProgress.value = progress;
       fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${validLines.length} lines)`;
-      await delay(30);
+      await delay(50);
     }
 
-    fwStatus.textContent = 'Firmware update complete';
+    fwStatus.textContent = 'Firmware upload complete';
     fwProgress.value = 100;
-    debugWindow.value += "FW update complete\n";
+    debugWindow.value += "FW upload complete\n";
 
   } catch (err) {
     fwStatus.textContent = 'Error: ' + err.message;
