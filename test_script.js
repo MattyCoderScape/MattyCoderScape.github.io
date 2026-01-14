@@ -1,4 +1,4 @@
-// test_script.js V8
+// test_script.js V8.
 
 let port;
 let reader;
@@ -215,3 +215,4 @@ window.getReader = function() {
   }
   return reader;
 };
+
