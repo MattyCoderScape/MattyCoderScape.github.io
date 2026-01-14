@@ -38,6 +38,10 @@
   <div style="margin: 12px 0;">
     <button id="csum">CSUM</button>
     <input id="csum_result" readonly size="3" value="00">
+    <label style="margin-left: 15px; user-select: none;">
+      <input type="checkbox" id="auto_append_csum" checked>
+      Append CSUM
+    </label>
   </div>
 
   <div class="controls">
@@ -84,7 +88,7 @@
 
   <!-- Version display script -->
   <script>
-    window.HTML_VERSION = "17";
+    window.HTML_VERSION = "18";
 
     function updateVersions() {
       document.getElementById('html_ver').textContent = `HTML V${window.HTML_VERSION}`;
@@ -100,4 +104,3 @@
   <script src="fw_update.js"></script>
 </body>
 </html>
-
