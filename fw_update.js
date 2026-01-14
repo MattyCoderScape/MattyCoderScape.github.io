@@ -1,4 +1,4 @@
-// fw_update.js V13 – exact TT2 timing: send line + \r, wait for XOFF+ACK, then XON
+// fw_update.js V14 – fixed multi-byte response handling + consumes bytes
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -76,7 +76,6 @@ fwUpdateBtn.addEventListener('click', async () => {
 
     debugWindow.value += "Direct line-by-line upload (no C0 or wait - unit in BL mode)\n";
 
-    // TT2-style: send line + \r, wait for XOFF + ACK, then XON
     let lineIndex = 0;
     for (const line of validLines) {
       const trimmed = line.trim();
@@ -84,42 +83,34 @@ fwUpdateBtn.addEventListener('click', async () => {
       const encoder = new TextEncoder();
       const lineBytes = encoder.encode(trimmed + '\r');
 
-      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\r\n`;
+      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      // Wait for exactly 2 bytes: XOFF (0x13) + ACK (0x06)
+      // Read until we have at least 2 bytes (XOFF + ACK expected)
       let retMsg = new Uint8Array(0);
-      while (retMsg.length < 2) {
+      const start = Date.now();
+      while (retMsg.length < 2 && Date.now() - start < 6000) {
         const { value, done } = await window.getReader().read();
-        if (done || !value) break;
+        if (done || !value) continue;
         retMsg = new Uint8Array([...retMsg, ...value]);
+        debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
       }
 
       if (retMsg.length >= 2) {
-        debugWindow.value += `Line ${lineIndex + 1} response: ${Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
-        if (retMsg[0] !== 0x13) debugWindow.value += `Warning: First byte not XOFF\n`;
-        if (retMsg[1] !== 0x06) debugWindow.value += `Warning: Second byte not ACK\n`;
+        const hexResp = Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+        debugWindow.value += `Line ${lineIndex + 1} response: ${hexResp}\n`;
+
+        if (retMsg[0] !== 0x13) debugWindow.value += `Warning: Expected XOFF (13) as first byte\n`;
+        if (retMsg[1] !== 0x06) debugWindow.value += `Warning: Expected ACK (06) as second byte\n`;
       } else {
-        debugWindow.value += `Line ${lineIndex + 1}: incomplete response\n`;
+        debugWindow.value += `Line ${lineIndex + 1}: timeout or incomplete response\n`;
       }
 
-      // Wait for XON (0x11)
-      let xonReceived = false;
-      const xonStart = Date.now();
-      while (!xonReceived && Date.now() - xonStart < 10000) {
-        const { value, done } = await window.getReader().read();
-        if (done || !value) continue;
-        for (let b of value) {
-          if (b === 0x11) {
-            xonReceived = true;
-            debugWindow.value += `XON received for line ${lineIndex + 1}\n`;
-            break;
-          }
-        }
-      }
-
-      if (!xonReceived) {
-        debugWindow.value += `Timeout waiting for XON after line ${lineIndex + 1}\n`;
+      // Consume any extra bytes (clean buffer)
+      while (true) {
+        const { value, done } = await window.getReader().read({ timeout: 50 });
+        if (done || !value || value.length === 0) break;
+        debugWindow.value += `Extra bytes consumed: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
       }
 
       lineIndex++;
@@ -142,33 +133,6 @@ fwUpdateBtn.addEventListener('click', async () => {
     fwProgressContainer.style.display = 'none';
   }
 });
-
-async function waitForAnyOf(expectedBytes, timeoutMs) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(null), timeoutMs);
-
-    (async () => {
-      try {
-        while (true) {
-          const { value, done } = await window.getReader().read();
-          if (done) break;
-          for (let b of value) {
-            if (expectedBytes.includes(b)) {
-              clearTimeout(timeout);
-              resolve(b);
-              return;
-            }
-          }
-        }
-        clearTimeout(timeout);
-        resolve(null);
-      } catch {
-        clearTimeout(timeout);
-        resolve(null);
-      }
-    })();
-  });
-}
 
 function delay(ms) {
   return new Promise(r => setTimeout(r, ms));
