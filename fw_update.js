@@ -1,7 +1,4 @@
-// fw_update.js V16
-
-// Global version for HTML to read
-window.FW_UPDATE_VERSION = "16";
+// fw_update.js V17 – recreate reader after each line to avoid stall
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -89,23 +86,24 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      // Aggressive flush after send (emulate FT_Purge RX)
-      await drainReader(10);  // 10 dummy reads
+      // Recreate reader to avoid stall
+      if (reader) {
+        await reader.cancel().catch(() => {});
+        reader = null;
+      }
+      reader = port.readable.getReader();
 
-      // Wait for the expected 2 bytes (XOFF + ACK)
+      // Wait for response
       let retMsg = new Uint8Array(0);
       const start = Date.now();
       while (retMsg.length < 2 && Date.now() - start < 3000) {
         try {
-          const { value, done } = await Promise.race([
-            window.getReader().read(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("read timeout")), 500))
-          ]);
+          const { value, done } = await reader.read();
           if (done || !value) break;
           retMsg = new Uint8Array([...retMsg, ...value]);
           debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
         } catch (e) {
-          debugWindow.value += `Read error/timeout: ${e.message}\n`;
+          debugWindow.value += `Read error: ${e.message}\n`;
           break;
         }
       }
@@ -114,11 +112,8 @@ fwUpdateBtn.addEventListener('click', async () => {
         const hexResp = Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ');
         debugWindow.value += `Line ${lineIndex + 1} response: ${hexResp}\n`;
       } else {
-        debugWindow.value += `Line ${lineIndex + 1}: timeout or incomplete response (got ${retMsg.length} bytes)\n`;
+        debugWindow.value += `Line ${lineIndex + 1}: no response or timeout\n`;
       }
-
-      // Final flush after response
-      await drainReader(10);
 
       lineIndex++;
       const progress = Math.round((lineIndex / validLines.length) * 100);
@@ -140,26 +135,6 @@ fwUpdateBtn.addEventListener('click', async () => {
     fwProgressContainer.style.display = 'none';
   }
 });
-
-// Aggressive drain helper
-async function drainReader(maxAttempts = 20) {
-  let drained = 0;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const { value, done } = await Promise.race([
-        window.getReader().read(),
-        new Promise(r => setTimeout(() => r({ value: new Uint8Array(0), done: true }), 20))
-      ]);
-      if (done || !value || value.length === 0) break;
-      drained += value.length;
-      debugWindow.value += `Drained ${value.length} bytes (total ${drained})\n`;
-    } catch (e) {
-      debugWindow.value += `Drain error: ${e.message}\n`;
-      break;
-    }
-  }
-  if (drained > 0) debugWindow.value += `Drain complete: ${drained} bytes cleared\n`;
-}
 
 function delay(ms) {
   return new Promise(r => setTimeout(r, ms));
