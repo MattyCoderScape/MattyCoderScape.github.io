@@ -1,3 +1,5 @@
+// fw_update.js V4 – firmware update logic
+
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
 const fwFileInput = document.getElementById('fw_file_input');
@@ -54,49 +56,56 @@ fwUpdateBtn.addEventListener('click', async () => {
     const text = await selectedFile.text();
     const lines = text.split(/\r?\n/);
 
-    // Validate prefixes
+    // Validate and filter lines (skip comments starting with ;)
+    const validLines = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line) continue;
-      if (line.startsWith(':') || line.startsWith('|')) continue;
-      throw new Error(`Invalid line ${i + 1}: must start with ':' or '|'`);
+      if (!line || line.startsWith(';') || line.startsWith('#')) continue;
+      if (line.startsWith(':') || line.startsWith('|')) {
+        validLines.push(line);
+      } else {
+        debugWindow.value += `Skipped invalid line ${i + 1}: ${line.substring(0, 40)}...\n`;
+      }
     }
 
-    fwStatus.textContent = `Sending ${lines.length} lines...`;
-    debugWindow.value += `FW update: ${lines.length} lines from ${selectedFile.name}\n`;
+    if (validLines.length === 0) {
+      throw new Error("No valid HEX lines found in file");
+    }
 
-    // 1. Send C0 entry command
-    debugWindow.value += "Sending C0 entry command...\n";
+    fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
+    debugWindow.value += `FW update started: ${validLines.length} valid lines from ${selectedFile.name}\n`;
+
+    // Send bootloader entry
     const bootCmd = new Uint8Array([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
     await window.sendBytes(bootCmd);
-    debugWindow.value += "C0 command sent\n";
+    debugWindow.value += "Sent C0 bootloader entry command\n";
 
-    // 2. Wait 3000 ms for reset, log every byte received
-    fwStatus.textContent = 'Waiting for bootloader (3000 ms)...';
-    debugWindow.value += "Waiting 3000 ms for reset/bootloader - capturing all incoming data...\n";
+    // Wait 2000 ms for reset/bootloader init + log incoming bytes
+    fwStatus.textContent = 'Waiting for bootloader (2000 ms)...';
+    debugWindow.value += "Waiting 2000 ms for reset/bootloader - capturing all incoming data...\n";
     let earlyBytes = new Uint8Array(0);
     const startTime = Date.now();
-    while (Date.now() - startTime < 3000) {
+    while (Date.now() - startTime < 2000) {
       try {
         const { value, done } = await window.getReader().read();
         if (done) break;
         if (value && value.length > 0) {
           earlyBytes = new Uint8Array([...earlyBytes, ...value]);
-          debugWindow.value += `Received during wait (${value.length} bytes): ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+          debugWindow.value += `Received during wait: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
         }
       } catch (err) {
-        debugWindow.value += `Wait error: ${err.message}\n`;
+        debugWindow.value += `Error during wait: ${err.message}\n`;
         break;
       }
       await delay(100);
     }
     if (earlyBytes.length > 0) {
-      debugWindow.value += `Total received during reset: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+      debugWindow.value += `Total early response: ${Array.from(earlyBytes).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
     } else {
-      debugWindow.value += "No data received during 3000 ms wait\n";
+      debugWindow.value += "No response during 2000 ms wait\n";
     }
 
-    // 3. Re-open port (reset often causes port drop/re-enumerate)
+    // Re-open port after reset
     fwStatus.textContent = 'Re-opening port after reset...';
     debugWindow.value += "Re-opening port after reset...\n";
     try {
@@ -109,11 +118,10 @@ fwUpdateBtn.addEventListener('click', async () => {
       throw err;
     }
 
-    // 4. Line-by-line upload
+    // Line-by-line upload
     let lineIndex = 0;
-    for (const line of lines) {
+    for (const line of validLines) {
       const trimmed = line.trim();
-      if (!trimmed) continue;
 
       const encoder = new TextEncoder();
       const lineBytes = encoder.encode(trimmed + '\r\n');
@@ -129,9 +137,9 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
 
       lineIndex++;
-      const progress = Math.round((lineIndex / lines.length) * 100);
+      const progress = Math.round((lineIndex / validLines.length) * 100);
       fwProgress.value = progress;
-      fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${lines.length} lines)`;
+      fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${validLines.length} lines)`;
       await delay(30);
     }
 
