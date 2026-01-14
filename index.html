@@ -15,6 +15,9 @@
     }
     #port_info.disconnected { color: #d32f2f; }
     #port_info.connected { color: #2e7d32; }
+    progress { width: 100%; height: 20px; }
+    #fw_file_name { margin-left: 10px; color: #555; font-style: italic; }
+    #version_info { font-size: 0.9em; color: #666; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -26,7 +29,7 @@
     <span id="fw_ver">fw_update.js V7</span>
   </div>
 
-  <h2>CM5-LTS Serial Tool 1v8</h2>
+  <h2>CM5-LTS Serial Tool</h2>
 
   <label for="term_input">Send Bytes</label>
   <textarea id="term_input" rows="4" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
@@ -40,6 +43,14 @@
     <button id="openclose_port">Open</button>
     <button id="send" disabled>Send</button>
     <button id="clear">Clear</button>
+  </div>
+
+  <!-- FW update controls -->
+  <div class="controls">
+    <button id="fw_browse">Open FW File</button>
+    <span id="fw_file_name">No file selected</span>
+    <button id="fw_update" disabled>Update FW</button>
+    <input type="file" id="fw_file_input" accept=".tthex,.hex" style="display:none;">
   </div>
 
   <label for="debug_window">Debug</label>
@@ -60,8 +71,16 @@
 
   <textarea id="term_window" readonly rows="14"></textarea>
 
+  <!-- FW progress -->
+  <div id="fw_progress_container" style="margin-top: 15px; display:none;">
+    <label for="fw_progress">Firmware Upload Progress:</label>
+    <progress id="fw_progress" value="0" max="100" style="width:100%; height:20px;"></progress>
+    <div id="fw_status" style="margin-top: 6px; color: #555;">FW Status: Ready</div>
+  </div>
+
   <span id="port_info" class="disconnected">Disconnected</span>
 
   <script src="test_script.js"></script>
+  <script src="fw_update.js"></script>
 </body>
 </html>
