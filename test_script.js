@@ -1,4 +1,4 @@
-// test_script.js V4
+// test_script.js V5 – version stamp added
 
 let port;
 let reader;
@@ -38,9 +38,6 @@ function updateUI(connected = portOpen) {
 }
 
 window.onload = function () {
-  // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V4 loaded\n";
-
   termWindow.value = "";
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
@@ -67,7 +64,7 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Update version display in UI
-  document.getElementById("core_ver").textContent = "test_script.js V4";
+  document.getElementById("core_ver").textContent = "test_script.js V5";
 };
 
 function liveCleanInput() {
@@ -219,5 +216,5 @@ window.getReader = function() {
 };
 
 // Log version for confirmation
-if (debugWindow) debugWindow.value += "test_script.js V4 loaded\n";
-document.getElementById("core_ver").textContent = "test_script.js V4";
+if (debugWindow) debugWindow.value += "test_script.js V5 loaded\n";
+document.getElementById("core_ver").textContent = "test_script.js V5";
