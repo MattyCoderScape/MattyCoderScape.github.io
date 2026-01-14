@@ -1,7 +1,7 @@
-// test_script.js V15
+// test_script.js V16
 
 // Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "15";
+window.TEST_SCRIPT_VERSION = "16";
 
 let port;
 let reader;
@@ -67,8 +67,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V15 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V15";
+  if (debugWindow) debugWindow.value += "test_script.js V16 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V16";
 };
 
 function liveCleanInput() {
@@ -115,7 +115,7 @@ async function togglePort() {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
     });
-    await port.open({ baudRate: 9600 });
+    await port.open({ baudRate: 9600 }); // required but ignored for FT245
     reader = port.readable.getReader();
     portOpen = true;
     updateUI();
