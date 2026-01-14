@@ -1,4 +1,4 @@
-// fw_update.js V10 – immediate line-by-line upload for stuck BL mode (no C0, no wait)
+// fw_update.js V12 – immediate line-by-line upload for stuck BL mode (no C0, no wait)
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
