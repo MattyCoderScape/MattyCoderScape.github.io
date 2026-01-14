@@ -1,4 +1,4 @@
-// test_script.js V11
+// test_script.js V12
 
 let port;
 let reader;
@@ -64,8 +64,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V11 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V11";
+  if (debugWindow) debugWindow.value += "test_script.js V12 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V12";
 };
 
 function liveCleanInput() {
@@ -112,7 +112,7 @@ async function togglePort() {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
     });
-    await port.open({ baudRate: 9600 }); // baudRate required, but ignored for FT245 FIFO
+    await port.open({ baudRate: 9600 }); // required but ignored for FT245
     reader = port.readable.getReader();
     portOpen = true;
     updateUI();
