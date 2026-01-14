@@ -1,7 +1,7 @@
 // test_script.js V16
 
 // Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "16";
+window.TEST_SCRIPT_VERSION = "18";
 
 let port;
 let reader;
@@ -218,3 +218,4 @@ window.getReader = function() {
   }
   return reader;
 };so test script stays at 16
+
