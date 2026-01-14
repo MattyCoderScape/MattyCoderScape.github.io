@@ -1,4 +1,4 @@
-// fw_update.js V9 – immediate line-by-line upload for stuck BL mode (no C0, no 2000 ms wait)
+// fw_update.js V10 – optimized line-by-line upload with 0 ms delay + 1000 ms timeout
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -86,21 +86,27 @@ fwUpdateBtn.addEventListener('click', async () => {
       const encoder = new TextEncoder();
       const lineBytes = encoder.encode(trimmed + '\r\n');
 
-      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
+      if (lineIndex % 100 === 0) {
+        debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
+      }
       await window.sendBytes(lineBytes);
 
-      const response = await waitForAnyOf([0x06, 0x11, 0x13], 6000);
+      const response = await waitForAnyOf([0x06, 0x11, 0x13], 1000);
       if (response === null) {
-        debugWindow.value += `No response for line ${lineIndex + 1} — continuing (bootloader may not ACK every line)\n`;
+        if (lineIndex % 100 === 0) {
+          debugWindow.value += `No response for line ${lineIndex + 1} — continuing\n`;
+        }
       } else {
-        debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
+        if (lineIndex % 100 === 0) {
+          debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
+        }
       }
 
       lineIndex++;
       const progress = Math.round((lineIndex / validLines.length) * 100);
       fwProgress.value = progress;
       fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${validLines.length} lines)`;
-      await delay(50);
+      await delay(0); // no delay – as fast as possible
     }
 
     fwStatus.textContent = 'Firmware upload complete';
