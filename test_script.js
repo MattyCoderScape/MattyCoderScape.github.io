@@ -1,4 +1,4 @@
-// test_script.js V9
+// test_script.js V10
 
 let port;
 let reader;
@@ -64,8 +64,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V9 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V9";
+  if (debugWindow) debugWindow.value += "test_script.js V10 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V10";
 };
 
 function liveCleanInput() {
@@ -112,7 +112,7 @@ async function togglePort() {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
     });
-    await port.open({ baudRate: 9600 });
+    await port.open(); // No baudRate for FT245 FIFO
     reader = port.readable.getReader();
     portOpen = true;
     updateUI();
