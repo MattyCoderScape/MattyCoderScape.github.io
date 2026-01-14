@@ -1,4 +1,4 @@
-// test_script.js V5 – version stamp added
+// test_script.js V7
 
 let port;
 let reader;
@@ -63,8 +63,9 @@ window.onload = function () {
   const prefill = params.get("prefill");
   if (prefill) termInput.value = prefill;
 
-  // Update version display in UI
-  document.getElementById("core_ver").textContent = "test_script.js V5";
+  // Log version for confirmation
+  if (debugWindow) debugWindow.value += "test_script.js V7 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V7";
 };
 
 function liveCleanInput() {
@@ -214,7 +215,3 @@ window.getReader = function() {
   }
   return reader;
 };
-
-// Log version for confirmation
-if (debugWindow) debugWindow.value += "test_script.js V5 loaded\n";
-document.getElementById("core_ver").textContent = "test_script.js V5";
