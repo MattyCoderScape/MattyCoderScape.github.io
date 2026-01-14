@@ -1,4 +1,7 @@
-// fw_update.js V14 – fixed multi-byte response handling + consumes bytes
+// fw_update.js V15
+
+// Global version for HTML to read
+window.FW_UPDATE_VERSION = "15";
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -86,31 +89,19 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      // Read until we have at least 2 bytes (XOFF + ACK expected)
       let retMsg = new Uint8Array(0);
       const start = Date.now();
       while (retMsg.length < 2 && Date.now() - start < 6000) {
         const { value, done } = await window.getReader().read();
-        if (done || !value) continue;
+        if (done || !value) break;
         retMsg = new Uint8Array([...retMsg, ...value]);
-        debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
       }
 
       if (retMsg.length >= 2) {
         const hexResp = Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ');
         debugWindow.value += `Line ${lineIndex + 1} response: ${hexResp}\n`;
-
-        if (retMsg[0] !== 0x13) debugWindow.value += `Warning: Expected XOFF (13) as first byte\n`;
-        if (retMsg[1] !== 0x06) debugWindow.value += `Warning: Expected ACK (06) as second byte\n`;
       } else {
-        debugWindow.value += `Line ${lineIndex + 1}: timeout or incomplete response\n`;
-      }
-
-      // Consume any extra bytes (clean buffer)
-      while (true) {
-        const { value, done } = await window.getReader().read({ timeout: 50 });
-        if (done || !value || value.length === 0) break;
-        debugWindow.value += `Extra bytes consumed: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+        debugWindow.value += `Line ${lineIndex + 1}: incomplete response\n`;
       }
 
       lineIndex++;
