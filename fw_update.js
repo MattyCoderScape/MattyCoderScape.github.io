@@ -1,4 +1,7 @@
-// fw_update.js V17 – with elapsed timer under progress bar
+/ fw_update.js V17 – recreate reader after each line to avoid stall
+
+**// Global version for HTML to read**
+window.FW_UPDATE_VERSION = "17";
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -7,12 +10,9 @@ const fwFileName = document.getElementById('fw_file_name');
 const fwStatus = document.getElementById('fw_status');
 const fwProgress = document.getElementById('fw_progress');
 const fwProgressContainer = document.getElementById('fw_progress_container');
-const elapsedTimeEl = document.getElementById('elapsed_time');
 
 let selectedFile = null;
 let updateInProgress = false;
-let startTime = null;
-let timerInterval = null;
 
 fwBrowseBtn.addEventListener('click', () => {
   fwFileInput.click();
@@ -55,16 +55,6 @@ fwUpdateBtn.addEventListener('click', async () => {
   fwProgress.value = 0;
   fwUpdateBtn.disabled = true;
 
-  // Start elapsed timer
-  startTime = Date.now();
-  elapsedTimeEl.textContent = 'Elapsed: 00:00';
-  timerInterval = setInterval(() => {
-    const elapsed = Date.now() - startTime;
-    const minutes = Math.floor(elapsed / 60000);
-    const seconds = Math.floor((elapsed % 60000) / 1000);
-    elapsedTimeEl.textContent = `Elapsed: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }, 1000);
-
   try {
     const text = await selectedFile.text();
     const lines = text.split(/\r?\n/);
@@ -99,14 +89,26 @@ fwUpdateBtn.addEventListener('click', async () => {
       debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
       await window.sendBytes(lineBytes);
 
-      // Wait for response (XOFF + ACK)
+      // Recreate reader to avoid stall
+      if (reader) {
+        await reader.cancel().catch(() => {});
+        reader = null;
+      }
+      reader = port.readable.getReader();
+
+      // Wait for response
       let retMsg = new Uint8Array(0);
       const start = Date.now();
       while (retMsg.length < 2 && Date.now() - start < 3000) {
-        const { value, done } = await window.getReader().read();
-        if (done || !value) break;
-        retMsg = new Uint8Array([...retMsg, ...value]);
-        debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+        try {
+          const { value, done } = await reader.read();
+          if (done || !value) break;
+          retMsg = new Uint8Array([...retMsg, ...value]);
+          debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+        } catch (e) {
+          debugWindow.value += `Read error: ${e.message}\n`;
+          break;
+        }
       }
 
       if (retMsg.length >= 2) {
@@ -134,8 +136,6 @@ fwUpdateBtn.addEventListener('click', async () => {
     updateInProgress = false;
     fwUpdateBtn.disabled = false;
     fwProgressContainer.style.display = 'none';
-    // Stop timer
-    if (timerInterval) clearInterval(timerInterval);
   }
 });
 
