@@ -184,7 +184,7 @@ function detectEnter(e) {
 }
 updateUI();
 
-// Bridge for fw_update.js - added at the very bottom
+// Bridge for fw_update.js
 window.sendBytes = async function(bytes) {
   if (!portOpen || !port?.writable) {
     if (debugWindow) debugWindow.value += "Bridge: Cannot send - port not open\n";
