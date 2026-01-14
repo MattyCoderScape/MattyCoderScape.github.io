@@ -1,4 +1,7 @@
-// test_script.js V17
+// test_script.js V16
+
+// Global version for HTML to read
+window.TEST_SCRIPT_VERSION = "16";
 
 let port;
 let reader;
@@ -64,8 +67,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V17 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V17";
+  if (debugWindow) debugWindow.value += "test_script.js V16 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V16";
 };
 
 function liveCleanInput() {
@@ -214,4 +217,4 @@ window.getReader = function() {
     throw new Error("No reader - port not open");
   }
   return reader;
-};
+};so test script stays at 16
