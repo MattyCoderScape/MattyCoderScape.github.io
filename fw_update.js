@@ -1,5 +1,8 @@
 // fw_update.js V17 – recreate reader after each line to avoid stall
 
+// Global version for HTML to read
+window.FW_UPDATE_VERSION = "17";
+
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
 const fwFileInput = document.getElementById('fw_file_input');
