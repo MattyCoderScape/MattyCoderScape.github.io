@@ -1,7 +1,7 @@
 // fw_update.js V17 – with elapsed timer under progress bar
 
 // Global version for HTML to read
-window.FW_UPDATE_VERSION = "17";
+window.FW_UPDATE_VERSION = "17.2";
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
