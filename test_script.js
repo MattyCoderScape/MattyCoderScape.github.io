@@ -1,7 +1,7 @@
 // test_script.js V17
 
 // Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "17";
+window.TEST_SCRIPT_VERSION = "17.3";
 
 let port;
 let reader;
@@ -218,3 +218,4 @@ window.getReader = function() {
   }
   return reader;
 };
+
