@@ -1,144 +1,220 @@
-// fw_update.js V17 – recreate reader after each line to avoid stall
+// test_script.js V16
 
 // Global version for HTML to read
-window.FW_UPDATE_VERSION = "17.5";
+window.TEST_SCRIPT_VERSION = "16.2";
 
-const fwBrowseBtn = document.getElementById('fw_browse');
-const fwUpdateBtn = document.getElementById('fw_update');
-const fwFileInput = document.getElementById('fw_file_input');
-const fwFileName = document.getElementById('fw_file_name');
-const fwStatus = document.getElementById('fw_status');
-const fwProgress = document.getElementById('fw_progress');
-const fwProgressContainer = document.getElementById('fw_progress_container');
+let port;
+let reader;
+let portOpen = false;
+let rxByteCount = 0;
+let displayMode = "hex";
 
-let selectedFile = null;
-let updateInProgress = false;
+const termInput = document.getElementById("term_input");
+const sendBtn = document.getElementById("send");
+const clearBtn = document.getElementById("clear");
+const openBtn = document.getElementById("openclose_port");
+const portInfo = document.getElementById("port_info");
+const termWindow = document.getElementById("term_window");
+const debugWindow = document.getElementById("debug_window");
+const csumBtn = document.getElementById("csum");
+const csumResult = document.getElementById("csum_result");
+const rxCountEl = document.getElementById("rx_count");
 
-fwBrowseBtn.addEventListener('click', () => {
-  fwFileInput.click();
-});
+// Update UI states
+function updateUI(connected = portOpen) {
+  openBtn.textContent = connected ? "Close" : "Open";
 
-fwFileInput.addEventListener('change', () => {
-  const file = fwFileInput.files[0];
-  if (!file) return;
-
-  const ext = file.name.toLowerCase().split('.').pop();
-  if (ext !== 'hex' && ext !== 'tthex') {
-    fwStatus.textContent = 'Please select a .hex or .tthex file';
-    fwFileInput.value = '';
-    return;
+  if (connected) {
+    portInfo.textContent = "Connected";
+    portInfo.classList.remove("disconnected");
+    portInfo.classList.add("connected");
+  } else {
+    portInfo.textContent = "Disconnected";
+    portInfo.classList.remove("connected");
+    portInfo.classList.add("disconnected");
   }
 
-  selectedFile = file;
-  fwFileName.textContent = file.name;
-  fwUpdateBtn.disabled = false;
-  fwStatus.textContent = 'File ready – click Update FW';
-});
-
-fwUpdateBtn.addEventListener('click', async () => {
-  if (!selectedFile) {
-    fwStatus.textContent = 'No file selected';
-    return;
-  }
-  if (updateInProgress) {
-    fwStatus.textContent = 'Update already in progress';
-    return;
-  }
-  if (!portOpen) {
-    fwStatus.textContent = 'Port must be open first';
-    return;
-  }
-
-  updateInProgress = true;
-  fwStatus.textContent = 'Reading file...';
-  fwProgressContainer.style.display = 'block';
-  fwProgress.value = 0;
-  fwUpdateBtn.disabled = true;
-
-  try {
-    const text = await selectedFile.text();
-    const lines = text.split(/\r?\n/);
-
-    const validLines = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line || line.startsWith(';') || line.startsWith('#')) continue;
-      if (line.startsWith(':') || line.startsWith('|')) {
-        validLines.push(line);
-      } else {
-        debugWindow.value += `Skipped invalid line ${i + 1}: ${line.substring(0, 40)}...\n`;
-      }
-    }
-
-    if (validLines.length === 0) {
-      throw new Error("No valid HEX lines found in file");
-    }
-
-    fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
-    debugWindow.value += `FW update started: ${validLines.length} valid lines from ${selectedFile.name}\n`;
-
-    debugWindow.value += "Direct line-by-line upload (no C0 or wait - unit in BL mode)\n";
-
-    let lineIndex = 0;
-    for (const line of validLines) {
-      const trimmed = line.trim();
-
-      const encoder = new TextEncoder();
-      const lineBytes = encoder.encode(trimmed + '\r');
-
-      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
-      await window.sendBytes(lineBytes);
-
-      // Recreate reader to avoid stall
-      if (reader) {
-        await reader.cancel().catch(() => {});
-        reader = null;
-      }
-      reader = port.readable.getReader();
-
-      // Wait for response
-      let retMsg = new Uint8Array(0);
-      const start = Date.now();
-      while (retMsg.length < 2 && Date.now() - start < 3000) {
-        try {
-          const { value, done } = await reader.read();
-          if (done || !value) break;
-          retMsg = new Uint8Array([...retMsg, ...value]);
-          debugWindow.value += `Chunk received: ${Array.from(value).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
-        } catch (e) {
-          debugWindow.value += `Read error: ${e.message}\n`;
-          break;
-        }
-      }
-
-      if (retMsg.length >= 2) {
-        const hexResp = Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ');
-        debugWindow.value += `Line ${lineIndex + 1} response: ${hexResp}\n`;
-      } else {
-        debugWindow.value += `Line ${lineIndex + 1}: no response or timeout\n`;
-      }
-
-      lineIndex++;
-      const progress = Math.round((lineIndex / validLines.length) * 100);
-      fwProgress.value = progress;
-      fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${validLines.length} lines)`;
-    }
-
-    fwStatus.textContent = 'Firmware upload complete';
-    fwProgress.value = 100;
-    debugWindow.value += "FW upload complete\n";
-
-  } catch (err) {
-    fwStatus.textContent = 'Error: ' + err.message;
-    fwProgress.value = 0;
-    debugWindow.value += `FW update error: ${err.message}\n`;
-  } finally {
-    updateInProgress = false;
-    fwUpdateBtn.disabled = false;
-    fwProgressContainer.style.display = 'none';
-  }
-});
-
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
+  sendBtn.disabled = !connected;
+  termInput.disabled = false;
+  clearBtn.disabled = false;
+  csumBtn.disabled = false;
 }
+
+window.onload = function () {
+  termWindow.value = "";
+  rxByteCount = 0;
+  rxCountEl.textContent = "0 bytes received";
+  updateUI();
+
+  csumBtn.addEventListener("click", calculateCSUM);
+  clearBtn.addEventListener("click", () => {
+    termWindow.value = "";
+    rxByteCount = 0;
+    rxCountEl.textContent = "0 bytes received";
+  });
+  openBtn.addEventListener("click", togglePort);
+  sendBtn.addEventListener("click", sendData);
+  termInput.addEventListener("keydown", detectEnter);
+  termInput.addEventListener("input", liveCleanInput);
+
+  document.getElementById("display_mode").addEventListener("change", (e) => {
+    displayMode = e.target.value;
+    debugWindow.value += `[Display mode set to ${displayMode} — applies to next received data]\n`;
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const prefill = params.get("prefill");
+  if (prefill) termInput.value = prefill;
+
+  // Log version for confirmation
+  if (debugWindow) debugWindow.value += "test_script.js V16 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V16";
+};
+
+function liveCleanInput() {
+  let val = termInput.value.replace(/[^0-9A-Fa-f]/gi, '');
+  if (val !== termInput.value) termInput.value = val;
+  termInput.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
+}
+
+function calculateCSUM() {
+  let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+  termInput.value = val;
+  let hex = val;
+  debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
+  if (hex.length === 0) {
+    csumResult.value = "00";
+    return;
+  }
+  if (hex.length % 2 !== 0) {
+    debugWindow.value += "→ Odd length\n";
+    alert("Odd number of hex digits");
+    return;
+  }
+  let xor = 0;
+  for (let i = 0; i < hex.length; i += 2) {
+    xor ^= parseInt(hex.substring(i, i + 2), 16);
+  }
+  const result = xor.toString(16).toUpperCase().padStart(2, '0');
+  csumResult.value = result;
+  debugWindow.value += `→ CSUM = ${result}\n`;
+}
+
+async function togglePort() {
+  if (portOpen) {
+    if (reader) await reader.cancel().catch(() => {});
+    if (port) await port.close().catch(() => {});
+    port = null;
+    reader = null;
+    portOpen = false;
+    updateUI();
+    debugWindow.value += "Port closed\n";
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort({
+      filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
+    });
+    await port.open({ baudRate: 9600 });
+    reader = port.readable.getReader();
+    portOpen = true;
+    updateUI();
+    const info = port.getInfo();
+    debugWindow.value += "Port opened\n";
+    debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+    debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      let displayStr = "";
+      if (displayMode === "ascii") {
+        const decoder = new TextDecoder("utf-8", { fatal: false });
+        let text = decoder.decode(value, { stream: true });
+        text = text.replace(/\r\n/g, "\n");
+        text = text.replace(/[^\x20-\x7E\n]/g, ".");
+        displayStr = text;
+      } else {
+        value.forEach(b => {
+          displayStr += b.toString(16).toUpperCase().padStart(2, '0');
+          rxByteCount++;
+        });
+      }
+      termWindow.value += displayStr;
+      termWindow.scrollTop = termWindow.scrollHeight;
+      rxCountEl.textContent = `${rxByteCount} bytes received`;
+    }
+  } catch (err) {
+    debugWindow.value += `Open failed: ${err.message}\n`;
+    portOpen = false;
+    updateUI();
+  }
+}
+
+async function sendData() {
+  if (!portOpen || !port?.writable) {
+    debugWindow.value += "Cannot send – no port open\n";
+    return;
+  }
+  let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+  if (hex.length === 0) {
+    debugWindow.value += "Nothing to send\n";
+    return;
+  }
+  if (hex.length % 2 !== 0) {
+    debugWindow.value += "Odd hex length\n";
+    return;
+  }
+  rxByteCount = 0;
+  rxCountEl.textContent = "0 bytes received";
+  termWindow.value = "";
+  let toSend = hex;
+  if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
+    toSend += csumResult.value;
+  }
+  const bytes = new Uint8Array(
+    toSend.match(/.{1,2}/g).map(b => parseInt(b, 16))
+  );
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(bytes);
+    debugWindow.value += `Sent: ${toSend}\n`;
+  } catch (err) {
+    debugWindow.value += `Send error: ${err.message}\n`;
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+function detectEnter(e) {
+  if (e.keyCode === 13) {
+    e.preventDefault();
+    sendData();
+  }
+}
+updateUI();
+
+// Bridge for fw_update.js
+window.sendBytes = async function(bytes) {
+  if (!portOpen || !port?.writable) {
+    if (debugWindow) debugWindow.value += "Bridge: Cannot send - port not open\n";
+    throw new Error("Port not open for FW update");
+  }
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(bytes);
+    if (debugWindow) debugWindow.value += `Bridge: Sent ${bytes.length} bytes for FW\n`;
+  } catch (err) {
+    if (debugWindow) debugWindow.value += `Bridge send error: ${err.message}\n`;
+    throw err;
+  } finally {
+    writer.releaseLock();
+  }
+};
+
+window.getReader = function() {
+  if (!reader) {
+    if (debugWindow) debugWindow.value += "Bridge: No reader available\n";
+    throw new Error("No reader - port not open");
+  }
+  return reader;
+};
