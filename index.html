@@ -21,12 +21,12 @@
   </style>
 </head>
 <body>
-  <!-- Version stamp: index.html V13 -->
+  <!-- Version stamp: index.html V15 -->
   <div id="version_info">
     Files loaded: 
-    <span id="html_ver">HTML V13</span> | 
-    <span id="core_ver">test_script.js V13</span> | 
-    <span id="fw_ver">fw_update.js V13</span>
+    <span id="html_ver">HTML (loading...)</span> | 
+    <span id="core_ver">test_script.js (loading...)</span> | 
+    <span id="fw_ver">fw_update.js (loading...)</span>
   </div>
 
   <h2>CM5-LTS Serial Tool</h2>
@@ -79,6 +79,19 @@
   </div>
 
   <span id="port_info" class="disconnected">Disconnected</span>
+
+  <!-- Version display script – reads globals from the JS files -->
+  <script>
+    window.addEventListener('load', () => {
+      const htmlVer = document.getElementById('html_ver');
+      const coreVer = document.getElementById('core_ver');
+      const fwVer   = document.getElementById('fw_ver');
+
+      htmlVer.textContent = `HTML V${window.HTML_VERSION  || 'unknown'}`;
+      coreVer.textContent = `test_script.js V${window.TEST_SCRIPT_VERSION || 'unknown'}`;
+      fwVer.textContent   = `fw_update.js V${window.FW_UPDATE_VERSION   || 'unknown'}`;
+    });
+  </script>
 
   <script src="test_script.js"></script>
   <script src="fw_update.js"></script>
