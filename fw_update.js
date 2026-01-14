@@ -1,4 +1,4 @@
-// fw_update.js V12 – immediate line-by-line upload for stuck BL mode (no C0, no wait)
+// fw_update.js V13 – exact TT2 timing: send line + \r, wait for XOFF+ACK, then XON
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -56,7 +56,6 @@ fwUpdateBtn.addEventListener('click', async () => {
     const text = await selectedFile.text();
     const lines = text.split(/\r?\n/);
 
-    // Validate and filter lines (skip comments starting with ;)
     const validLines = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -75,32 +74,58 @@ fwUpdateBtn.addEventListener('click', async () => {
     fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
     debugWindow.value += `FW update started: ${validLines.length} valid lines from ${selectedFile.name}\n`;
 
-    // No C0 command or wait – assume already in bootloader mode and send lines immediately
     debugWindow.value += "Direct line-by-line upload (no C0 or wait - unit in BL mode)\n";
 
-    // Line-by-line upload
+    // TT2-style: send line + \r, wait for XOFF + ACK, then XON
     let lineIndex = 0;
     for (const line of validLines) {
       const trimmed = line.trim();
 
       const encoder = new TextEncoder();
-      const lineBytes = encoder.encode(trimmed + '\r\n');
+      const lineBytes = encoder.encode(trimmed + '\r');
 
-      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\n`;
+      debugWindow.value += `Sending line ${lineIndex + 1}: ${trimmed}\r\n`;
       await window.sendBytes(lineBytes);
 
-      const response = await waitForAnyOf([0x06, 0x11, 0x13], 6000);
-      if (response === null) {
-        debugWindow.value += `No response for line ${lineIndex + 1} — continuing (bootloader may not ACK every line)\n`;
+      // Wait for exactly 2 bytes: XOFF (0x13) + ACK (0x06)
+      let retMsg = new Uint8Array(0);
+      while (retMsg.length < 2) {
+        const { value, done } = await window.getReader().read();
+        if (done || !value) break;
+        retMsg = new Uint8Array([...retMsg, ...value]);
+      }
+
+      if (retMsg.length >= 2) {
+        debugWindow.value += `Line ${lineIndex + 1} response: ${Array.from(retMsg.slice(0,2)).map(b => b.toString(16).padStart(2,'0')).join(' ')}\n`;
+        if (retMsg[0] !== 0x13) debugWindow.value += `Warning: First byte not XOFF\n`;
+        if (retMsg[1] !== 0x06) debugWindow.value += `Warning: Second byte not ACK\n`;
       } else {
-        debugWindow.value += `Response for line ${lineIndex + 1}: 0x${response.toString(16).padStart(2, '0')}\n`;
+        debugWindow.value += `Line ${lineIndex + 1}: incomplete response\n`;
+      }
+
+      // Wait for XON (0x11)
+      let xonReceived = false;
+      const xonStart = Date.now();
+      while (!xonReceived && Date.now() - xonStart < 10000) {
+        const { value, done } = await window.getReader().read();
+        if (done || !value) continue;
+        for (let b of value) {
+          if (b === 0x11) {
+            xonReceived = true;
+            debugWindow.value += `XON received for line ${lineIndex + 1}\n`;
+            break;
+          }
+        }
+      }
+
+      if (!xonReceived) {
+        debugWindow.value += `Timeout waiting for XON after line ${lineIndex + 1}\n`;
       }
 
       lineIndex++;
       const progress = Math.round((lineIndex / validLines.length) * 100);
       fwProgress.value = progress;
       fwStatus.textContent = `Progress: ${progress}% (${lineIndex}/${validLines.length} lines)`;
-      await delay(0); // no delay – as fast as possible
     }
 
     fwStatus.textContent = 'Firmware upload complete';
