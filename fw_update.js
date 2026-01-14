@@ -1,7 +1,7 @@
 // fw_update.js V17 – with elapsed timer under progress bar
 
 // Global version for HTML to read
-window.FW_UPDATE_VERSION = "17.2";
+window.FW_UPDATE_VERSION = "18.2";
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -89,13 +89,11 @@ fwUpdateBtn.addEventListener('click', async () => {
 
     fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
     debugWindow.value += `FW update started: ${validLines.length} valid lines from ${selectedFile.name}\n`;
-
     debugWindow.value += "Direct line-by-line upload (no C0 or wait - unit in BL mode)\n";
 
     let lineIndex = 0;
     for (const line of validLines) {
       const trimmed = line.trim();
-
       const encoder = new TextEncoder();
       const lineBytes = encoder.encode(trimmed + '\r');
 
