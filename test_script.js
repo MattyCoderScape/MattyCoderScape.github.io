@@ -1,7 +1,7 @@
-// test_script.js V16
+// test_script.js V17
 
 // Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "16.2";
+window.TEST_SCRIPT_VERSION = "17";
 
 let port;
 let reader;
@@ -67,8 +67,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V16 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V16";
+  if (debugWindow) debugWindow.value += "test_script.js V17 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V17";
 };
 
 function liveCleanInput() {
