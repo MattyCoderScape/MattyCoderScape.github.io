@@ -1,4 +1,4 @@
-// fw_update.js V5 – firmware update logic with lenient HEX validation
+// fw_update.js V7
 
 const fwBrowseBtn = document.getElementById('fw_browse');
 const fwUpdateBtn = document.getElementById('fw_update');
@@ -56,11 +56,11 @@ fwUpdateBtn.addEventListener('click', async () => {
     const text = await selectedFile.text();
     const lines = text.split(/\r?\n/);
 
-    // Validate and filter lines leniently (Intel HEX standard allows comments starting with ;)
+    // Validate and filter lines (skip comments starting with ;)
     const validLines = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line || line.startsWith(';') || line.startsWith('#')) continue; // skip comments and blank
+      if (!line || line.startsWith(';') || line.startsWith('#')) continue;
       if (line.startsWith(':') || line.startsWith('|')) {
         validLines.push(line);
       } else {
@@ -69,7 +69,7 @@ fwUpdateBtn.addEventListener('click', async () => {
     }
 
     if (validLines.length === 0) {
-      throw new Error("No valid HEX lines found in file (no lines starting with ':' or '|')");
+      throw new Error("No valid HEX lines found in file");
     }
 
     fwStatus.textContent = `Sending ${validLines.length} valid lines...`;
