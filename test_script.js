@@ -1,4 +1,4 @@
-// test_script.js V8.
+// test_script.js V9
 
 let port;
 let reader;
@@ -64,8 +64,8 @@ window.onload = function () {
   if (prefill) termInput.value = prefill;
 
   // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V8 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V8";
+  if (debugWindow) debugWindow.value += "test_script.js V9 loaded\n";
+  document.getElementById("core_ver").textContent = "test_script.js V9";
 };
 
 function liveCleanInput() {
@@ -215,4 +215,3 @@ window.getReader = function() {
   }
   return reader;
 };
-
