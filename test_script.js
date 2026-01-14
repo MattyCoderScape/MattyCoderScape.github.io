@@ -1,7 +1,7 @@
 // test_script.js V17
 
 // Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "17.3";
+window.TEST_SCRIPT_VERSION = "18.1";
 
 let port;
 let reader;
@@ -86,44 +86,47 @@ function calculateCSUM() {
     csumResult.value = "00";
     return;
   }
-  if (hex.length % 2 !== 0) {
-    debugWindow.value += "→ Odd length\n";
-    alert("Odd number of hex digits");
-    return;
-  }
-  let xor = 0;
+  let sum = 0;
   for (let i = 0; i < hex.length; i += 2) {
-    xor ^= parseInt(hex.substring(i, i + 2), 16);
+    sum += parseInt(hex.substr(i, 2), 16);
   }
-  const result = xor.toString(16).toUpperCase().padStart(2, '0');
-  csumResult.value = result;
-  debugWindow.value += `→ CSUM = ${result}\n`;
+  let csum = (0x100 - (sum & 0xFF)) & 0xFF;
+  csumResult.value = csum.toString(16).toUpperCase().padStart(2, '0');
 }
 
-async function togglePort() {
+function togglePort() {
   if (portOpen) {
-    if (reader) await reader.cancel().catch(() => {});
-    if (port) await port.close().catch(() => {});
-    port = null;
-    reader = null;
-    portOpen = false;
-    updateUI();
-    debugWindow.value += "Port closed\n";
-    return;
+    closePort();
+  } else {
+    openPort();
   }
+}
+
+async function openPort() {
   try {
-    port = await navigator.serial.requestPort({
-      filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
-    });
-    await port.open({ baudRate: 9600 });
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 }); // Adjust baud rate if needed
     reader = port.readable.getReader();
     portOpen = true;
-    updateUI();
-    const info = port.getInfo();
+    updateUI(true);
     debugWindow.value += "Port opened\n";
-    debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
-    debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
-    while (true) {
+    readLoop();
+  } catch (err) {
+    debugWindow.value += `Open failed: ${err.message}\n`;
+  }
+}
+
+function closePort() {
+  if (reader) reader.cancel();
+  if (port) port.close();
+  portOpen = false;
+  updateUI(false);
+  debugWindow.value += "Port closed\n";
+}
+
+async function readLoop() {
+  while (portOpen) {
+    try {
       const { value, done } = await reader.read();
       if (done) break;
       let displayStr = "";
@@ -142,11 +145,12 @@ async function togglePort() {
       termWindow.value += displayStr;
       termWindow.scrollTop = termWindow.scrollHeight;
       rxCountEl.textContent = `${rxByteCount} bytes received`;
+    } catch (err) {
+      debugWindow.value += `Read error: ${err.message}\n`;
+      portOpen = false;
+      updateUI();
+      break;
     }
-  } catch (err) {
-    debugWindow.value += `Open failed: ${err.message}\n`;
-    portOpen = false;
-    updateUI();
   }
 }
 
@@ -155,6 +159,7 @@ async function sendData() {
     debugWindow.value += "Cannot send – no port open\n";
     return;
   }
+
   let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
   if (hex.length === 0) {
     debugWindow.value += "Nothing to send\n";
@@ -164,20 +169,30 @@ async function sendData() {
     debugWindow.value += "Odd hex length\n";
     return;
   }
+
   rxByteCount = 0;
   rxCountEl.textContent = "0 bytes received";
   termWindow.value = "";
-  let toSend = hex;
-  if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
-    toSend += csumResult.value;
+
+  // Decide whether to append CSUM based on checkbox
+  const appendCsum = document.getElementById('auto_append_csum').checked;
+  if (appendCsum && csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
+    hex += csumResult.value;
+    debugWindow.value += `Appended CSUM: ${csumResult.value}\n`;
+  } else if (appendCsum) {
+    debugWindow.value += "CSUM not appended (invalid or empty)\n";
+  } else {
+    debugWindow.value += "CSUM not appended (checkbox unchecked)\n";
   }
+
   const bytes = new Uint8Array(
-    toSend.match(/.{1,2}/g).map(b => parseInt(b, 16))
+    hex.match(/.{1,2}/g).map(b => parseInt(b, 16))
   );
+
   const writer = port.writable.getWriter();
   try {
     await writer.write(bytes);
-    debugWindow.value += `Sent: ${toSend}\n`;
+    debugWindow.value += `Sent: ${hex}\n`;
   } catch (err) {
     debugWindow.value += `Send error: ${err.message}\n`;
   } finally {
@@ -191,6 +206,7 @@ function detectEnter(e) {
     sendData();
   }
 }
+
 updateUI();
 
 // Bridge for fw_update.js
@@ -218,4 +234,3 @@ window.getReader = function() {
   }
   return reader;
 };
-
