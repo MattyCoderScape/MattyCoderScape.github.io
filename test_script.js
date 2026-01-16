@@ -1,10 +1,8 @@
-// test_script.js V17
+// test_script.js V17.7 – terminal logic only, no global reader
 
-// Global version for HTML to read
-window.TEST_SCRIPT_VERSION = "17.3";
+window.TEST_SCRIPT_VERSION = "17.7";
 
 let port;
-let reader;
 let portOpen = false;
 let rxByteCount = 0;
 let displayMode = "hex";
@@ -22,7 +20,7 @@ const rxCountEl = document.getElementById("rx_count");
 
 // Update UI states
 function updateUI(connected = portOpen) {
-  openBtn.textContent = connected ? "Close" : "Open";
+  openBtn.textContent = connected ? "Close Port" : "Open Port";
 
   if (connected) {
     portInfo.textContent = "Connected";
@@ -39,37 +37,6 @@ function updateUI(connected = portOpen) {
   clearBtn.disabled = false;
   csumBtn.disabled = false;
 }
-
-window.onload = function () {
-  termWindow.value = "";
-  rxByteCount = 0;
-  rxCountEl.textContent = "0 bytes received";
-  updateUI();
-
-  csumBtn.addEventListener("click", calculateCSUM);
-  clearBtn.addEventListener("click", () => {
-    termWindow.value = "";
-    rxByteCount = 0;
-    rxCountEl.textContent = "0 bytes received";
-  });
-  openBtn.addEventListener("click", togglePort);
-  sendBtn.addEventListener("click", sendData);
-  termInput.addEventListener("keydown", detectEnter);
-  termInput.addEventListener("input", liveCleanInput);
-
-  document.getElementById("display_mode").addEventListener("change", (e) => {
-    displayMode = e.target.value;
-    debugWindow.value += `[Display mode set to ${displayMode} — applies to next received data]\n`;
-  });
-
-  const params = new URLSearchParams(window.location.search);
-  const prefill = params.get("prefill");
-  if (prefill) termInput.value = prefill;
-
-  // Log version for confirmation
-  if (debugWindow) debugWindow.value += "test_script.js V17 loaded\n";
-  document.getElementById("core_ver").textContent = "test_script.js V17";
-};
 
 function liveCleanInput() {
   let val = termInput.value.replace(/[^0-9A-Fa-f]/gi, '');
@@ -102,47 +69,34 @@ function calculateCSUM() {
 
 async function togglePort() {
   if (portOpen) {
-    if (reader) await reader.cancel().catch(() => {});
+    if (isFirmwareStrictUploadActive) {
+      debugWindow.value += "Cannot close port while strict upload is active\n";
+      return;
+    }
+    if (terminalReadController) {
+      terminalReadController.abort();
+    }
     if (port) await port.close().catch(() => {});
     port = null;
-    reader = null;
     portOpen = false;
     updateUI();
     debugWindow.value += "Port closed\n";
     return;
   }
+
   try {
     port = await navigator.serial.requestPort({
       filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
     });
-    await port.open({ baudRate: 9600 });
-    reader = port.readable.getReader();
+    await port.open({ baudRate: 115200 });
     portOpen = true;
     updateUI();
     const info = port.getInfo();
     debugWindow.value += "Port opened\n";
     debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
     debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      let displayStr = "";
-      if (displayMode === "ascii") {
-        const decoder = new TextDecoder("utf-8", { fatal: false });
-        let text = decoder.decode(value, { stream: true });
-        text = text.replace(/\r\n/g, "\n");
-        text = text.replace(/[^\x20-\x7E\n]/g, ".");
-        displayStr = text;
-      } else {
-        value.forEach(b => {
-          displayStr += b.toString(16).toUpperCase().padStart(2, '0');
-          rxByteCount++;
-        });
-      }
-      termWindow.value += displayStr;
-      termWindow.scrollTop = termWindow.scrollHeight;
-      rxCountEl.textContent = `${rxByteCount} bytes received`;
-    }
+
+    startTerminalReader();
   } catch (err) {
     debugWindow.value += `Open failed: ${err.message}\n`;
     portOpen = false;
@@ -174,14 +128,11 @@ async function sendData() {
   const bytes = new Uint8Array(
     toSend.match(/.{1,2}/g).map(b => parseInt(b, 16))
   );
-  const writer = port.writable.getWriter();
   try {
-    await writer.write(bytes);
+    await window.sendBytes(bytes);
     debugWindow.value += `Sent: ${toSend}\n`;
   } catch (err) {
     debugWindow.value += `Send error: ${err.message}\n`;
-  } finally {
-    writer.releaseLock();
   }
 }
 
@@ -191,31 +142,5 @@ function detectEnter(e) {
     sendData();
   }
 }
+
 updateUI();
-
-// Bridge for fw_update.js
-window.sendBytes = async function(bytes) {
-  if (!portOpen || !port?.writable) {
-    if (debugWindow) debugWindow.value += "Bridge: Cannot send - port not open\n";
-    throw new Error("Port not open for FW update");
-  }
-  const writer = port.writable.getWriter();
-  try {
-    await writer.write(bytes);
-    if (debugWindow) debugWindow.value += `Bridge: Sent ${bytes.length} bytes for FW\n`;
-  } catch (err) {
-    if (debugWindow) debugWindow.value += `Bridge send error: ${err.message}\n`;
-    throw err;
-  } finally {
-    writer.releaseLock();
-  }
-};
-
-window.getReader = function() {
-  if (!reader) {
-    if (debugWindow) debugWindow.value += "Bridge: No reader available\n";
-    throw new Error("No reader - port not open");
-  }
-  return reader;
-};
-

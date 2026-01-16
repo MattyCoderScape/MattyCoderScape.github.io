@@ -2,60 +2,62 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>CM5-LTS Serial Toolz</title>
+  <title>CM5-LTS Serial Tool</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; line-height: 1.5; }
-    textarea { font-family: monospace; width: 100%; box-sizing: border-box; }
+    textarea { font-family: monospace; width: 100%; box-sizing: border-box; height: 120px; }
     label { font-weight: bold; display: block; margin-bottom: 4px; }
-    .controls { margin: 15px 0; }
+    .controls { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .rx-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    #port_info {
-      font-weight: bold;
-      transition: color 0.3s ease;
-    }
-    #port_info.disconnected { color: #d32f2f; }
-    #port_info.connected { color: #2e7d32; }
+    #port_info { font-weight: bold; transition: color 0.3s ease; padding: 4px 8px; border-radius: 4px; }
+    #port_info.disconnected { background: #ffebee; color: #c62828; }
+    #port_info.connected   { background: #e8f5e9; color: #2e7d32; }
     progress { width: 100%; height: 20px; }
     #fw_file_name { margin-left: 10px; color: #555; font-style: italic; }
-    #version_info { font-size: 0.9em; color: #666; margin-bottom: 10px; }
+    #version_info { font-size: 0.9em; color: #222; margin-bottom: 10px; }
     #elapsed_time { font-size: 0.9em; color: #444; margin-top: 4px; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    textarea#debug_window, textarea#term_window { background: #f8f8f8; }
   </style>
 </head>
 <body>
-  <!-- Version stamp: index.html V17 -->
+
   <div id="version_info">
     Files loaded: 
-    <span id="html_ver">HTML (loading...)</span> | 
-    <span id="core_ver">test_script.js (loading...)</span> | 
-    <span id="fw_ver">fw_update.js (loading...)</span>
+    <span id="html_ver">HTML V17.9</span> | 
+    <span id="core_ver">test_script.js V17.7</span> | 
+    <span id="fw_ver">fw_update.js V32</span>
   </div>
 
   <h2>CM5-LTS Serial Tool</h2>
 
-  <label for="term_input">Send Bytes</label>
-  <textarea id="term_input" rows="4" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
+  <label for="term_input">Send Bytes (hex)</label>
+  <textarea id="term_input" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
 
   <div style="margin: 12px 0;">
-    <button id="csum">CSUM</button>
+    <button id="csum">Calculate CSUM</button>
     <input id="csum_result" readonly size="3" value="00">
   </div>
 
   <div class="controls">
-    <button id="openclose_port">Open</button>
+    <button id="openclose_port">Open Port</button>
     <button id="send" disabled>Send</button>
-    <button id="clear">Clear</button>
+    <button id="clear">Clear Terminal</button>
   </div>
 
-  <!-- FW update controls -->
+  <!-- Firmware Update Controls -->
   <div class="controls">
-    <button id="fw_browse">Open FW File</button>
+    <button id="fw_browse">Open .hex / .tthex File</button>
     <span id="fw_file_name">No file selected</span>
-    <button id="fw_update" disabled>Update FW</button>
+    <button id="fw_prepare" disabled>Prepare Upload</button>
+    <button id="start_strict_auto" disabled>Start Auto (ACK 13 06 11 gated)</button>
+    <button id="send_next_line" disabled>Send Next Line (Manual)</button>
+    <span id="current_line_num">Line 0/0</span>
     <input type="file" id="fw_file_input" accept=".tthex,.hex" style="display:none;">
   </div>
 
-  <label for="debug_window">Debug</label>
-  <textarea id="debug_window" readonly rows="10">Debug messages</textarea>
+  <label for="debug_window">Debug Log</label>
+  <textarea id="debug_window" readonly rows="10">Debug messages will appear here...</textarea>
 
   <div class="rx-header">
     <strong>Received Bytes</strong>
@@ -63,7 +65,7 @@
   </div>
 
   <div style="margin-bottom: 8px;">
-    <label for="display_mode" style="display: inline;">Display Data As:</label>
+    <label for="display_mode" style="display: inline;">Display As:</label>
     <select id="display_mode">
       <option value="hex" selected>HEX</option>
       <option value="ascii">ASCII</option>
@@ -72,8 +74,8 @@
 
   <textarea id="term_window" readonly rows="14"></textarea>
 
-  <!-- FW progress + elapsed timer -->
-  <div id="fw_progress_container" style="margin-top: 15px; display:none;">
+  <!-- Firmware Progress -->
+  <div id="fw_progress_container" style="margin-top: 15px; display:block;">
     <label for="fw_progress">Firmware Upload Progress:</label>
     <progress id="fw_progress" value="0" max="100" style="width:100%; height:20px;"></progress>
     <div id="fw_status" style="margin-top: 6px; color: #555;">FW Status: Ready</div>
@@ -82,22 +84,483 @@
 
   <span id="port_info" class="disconnected">Disconnected</span>
 
-  <!-- Version display script -->
+  <!-- Main logic (all embedded) -->
   <script>
-    window.HTML_VERSION = "17";
+    // ==============================================
+    // Global variables (declared once only)
+    // ==============================================
 
-    function updateVersions() {
-      document.getElementById('html_ver').textContent = `HTML V${window.HTML_VERSION}`;
-      document.getElementById('core_ver').textContent = `test_script.js V${window.TEST_SCRIPT_VERSION || '(not loaded)'}`;
-      document.getElementById('fw_ver').textContent   = `fw_update.js V${window.FW_UPDATE_VERSION   || '(not loaded)'}`;
+    let port = null;
+    let portOpen = false;
+    let rxByteCount = 0;
+    let displayMode = "hex";
+    let selectedFile = null;
+    let validLines = [];
+    let currentLineIndex = 0;
+    let isFirmwareStrictUploadActive = false;
+    let isInUploadMode = false; // mode flag: true = upload ACK detection, false = terminal display
+
+    const DEBUG_ACK = true; // ← set to true to log every incoming byte during upload
+
+    const ACK_PATTERN = new Uint8Array([0x13, 0x06, 0x11]);
+    const textEncoder = new TextEncoder(); // global reuse
+
+    let sharedReader = null; // single shared reader
+
+    // ACK state machine
+    let ackState = { index: 0, totalBytes: 0 };
+
+    // Resolver for the current ACK wait promise
+    let resolveCurrentAck = null;
+
+    // DOM elements
+    let termInput, sendBtn, clearBtn, openBtn, portInfo, termWindow, debugWindow, csumBtn, csumResult, rxCountEl;
+    let fwProgress, fwStatus, elapsedEl;
+
+    // ==============================================
+    // UI & terminal helpers
+    // ==============================================
+
+    function updateUI(connected = portOpen) {
+      openBtn.textContent = connected ? "Close Port" : "Open Port";
+      portInfo.textContent = connected ? "Connected" : "Disconnected";
+      portInfo.className = connected ? "connected" : "disconnected";
+      sendBtn.disabled = !connected;
+      termInput.disabled = false;
+      clearBtn.disabled = false;
+      csumBtn.disabled = false;
     }
 
-    updateVersions();
-    setTimeout(updateVersions, 500);
-  </script>
+    function liveCleanInput() {
+      let val = termInput.value.replace(/[^0-9A-Fa-f]/gi, '');
+      if (val !== termInput.value) termInput.value = val;
+      termInput.style.borderColor = (val.length % 2 !== 0) ? "#FF9800" : "";
+    }
 
-  <script src="test_script.js"></script>
-  <script src="fw_update.js"></script>
+    function calculateCSUM() {
+      let val = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+      termInput.value = val;
+      let hex = val;
+      debugWindow.value += `\n[CSUM] "${hex}" (${Math.floor(hex.length / 2)} bytes)\n`;
+      if (hex.length === 0) {
+        csumResult.value = "00";
+        return;
+      }
+      if (hex.length % 2 !== 0) {
+        debugWindow.value += "→ Odd length\n";
+        alert("Odd number of hex digits");
+        return;
+      }
+      let xor = 0;
+      for (let i = 0; i < hex.length; i += 2) {
+        xor ^= parseInt(hex.substring(i, i + 2), 16);
+      }
+      const result = xor.toString(16).toUpperCase().padStart(2, '0');
+      csumResult.value = result;
+      debugWindow.value += `→ CSUM = ${result}\n`;
+    }
+
+    async function togglePort() {
+      if (portOpen) {
+        if (isFirmwareStrictUploadActive) {
+          debugWindow.value += "Cannot close port while strict upload is active\n";
+          return;
+        }
+        if (sharedReader) {
+          sharedReader.cancel().catch(() => {});
+          sharedReader = null;
+        }
+        if (port) await port.close().catch(() => {});
+        port = null;
+        portOpen = false;
+        updateUI();
+        debugWindow.value += "Port closed\n";
+        return;
+      }
+
+      try {
+        port = await navigator.serial.requestPort({
+          filters: [{ usbVendorId: 0x0403, usbProductId: 0x6001 }]
+        });
+        await port.open({ baudRate: 115200 });
+        portOpen = true;
+        updateUI();
+        const info = port.getInfo();
+        debugWindow.value += "Port opened\n";
+        debugWindow.value += `usbVendorId: ${info.usbVendorId ?? 'undefined'} (0x${(info.usbVendorId ?? 0).toString(16).padStart(4, '0')})\n`;
+        debugWindow.value += `usbProductId: ${info.usbProductId ?? 'undefined'} (0x${(info.usbProductId ?? 0).toString(16).padStart(4, '0')})\n\n`;
+
+        startSharedReader();
+      } catch (err) {
+        debugWindow.value += `Open failed: ${err.message}\n`;
+        portOpen = false;
+        updateUI();
+      }
+    }
+
+    async function sendData() {
+      if (!portOpen || !port?.writable) {
+        debugWindow.value += "Port not open – attempting to open...\n";
+        await togglePort();
+        if (!portOpen) {
+          debugWindow.value += "Failed to open port – send aborted\n";
+          return;
+        }
+      }
+      let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (hex.length === 0) {
+        debugWindow.value += "Nothing to send\n";
+        return;
+      }
+      if (hex.length % 2 !== 0) {
+        debugWindow.value += "Odd hex length\n";
+        return;
+      }
+      rxByteCount = 0;
+      rxCountEl.textContent = "0 bytes received";
+      termWindow.value = "";
+      let toSend = hex;
+      if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
+        toSend += csumResult.value;
+      }
+      const bytes = textEncoder.encode(toSend);
+      try {
+        await sendBytes(bytes);
+        debugWindow.value += `Sent: ${toSend}\n`;
+      } catch (err) {
+        debugWindow.value += `Send error: ${err.message}\n`;
+      }
+    }
+
+    function detectEnter(e) {
+      if (e.keyCode === 13) {
+        e.preventDefault();
+        sendData();
+      }
+    }
+
+    // Local sendBytes with flush delay
+    async function sendBytes(bytes) {
+      if (!portOpen || !port?.writable) throw new Error("Port not open");
+      const writer = port.writable.getWriter();
+      try {
+        await writer.write(bytes);
+        await new Promise(r => setTimeout(r, 2)); // flush delay for FT245RL
+        debugWindow.value += `Sent ${bytes.length} bytes\n`;
+      } catch (err) {
+        debugWindow.value += `Send error: ${err.message}\n`;
+        throw err;
+      } finally {
+        try { writer.releaseLock(); } catch {}
+      }
+    }
+
+    // ==============================================
+    // Single shared reader – routes bytes based on mode
+    // ==============================================
+    async function startSharedReader() {
+      if (sharedReader) return;
+
+      sharedReader = port.readable.getReader();
+
+      (async () => {
+        try {
+          while (true) {
+            const { value, done } = await sharedReader.read();
+            if (done) break;
+
+            if (isInUploadMode) {
+              // Feed to ACK state machine during upload
+              for (let byte of value) {
+                if (DEBUG_ACK) debugWindow.value += `RX byte: 0x${byte.toString(16).toUpperCase()}\n`;
+
+                if (byte === ACK_PATTERN[ackState.index]) {
+                  ackState.index++;
+                  ackState.totalBytes++;
+                  if (ackState.index === ACK_PATTERN.length) {
+                    debugWindow.value += `ACK 13 06 11 detected after ${ackState.totalBytes} bytes\n`;
+                    if (resolveCurrentAck) {
+                      resolveCurrentAck(); // resolve the waiting promise
+                    }
+                    ackState.index = 0;
+                    ackState.totalBytes = 0;
+                  }
+                } else {
+                  ackState.index = (byte === ACK_PATTERN[0]) ? 1 : 0;
+                  ackState.totalBytes++;
+                }
+              }
+            } else {
+              // Normal terminal display mode
+              let displayStr = "";
+              if (displayMode === "ascii") {
+                const decoder = new TextDecoder("utf-8", { fatal: false });
+                let text = decoder.decode(value, { stream: true });
+                text = text.replace(/\r\n/g, "\n");
+                text = text.replace(/[^\x20-\x7E\n]/g, ".");
+                displayStr = text;
+              } else {
+                displayStr = Array.from(value)
+                  .map(b => b.toString(16).toUpperCase().padStart(2, '0'))
+                  .join('');
+              }
+
+              rxByteCount += value.length;
+
+              termWindow.value += displayStr;
+              termWindow.scrollTop = termWindow.scrollHeight;
+              rxCountEl.textContent = `${rxByteCount} bytes received`;
+            }
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            debugWindow.value += `Shared reader error: ${err.message}\n`;
+          }
+        } finally {
+          try { sharedReader.releaseLock(); } catch {}
+          debugWindow.value += "[Shared Reader] Released\n";
+          sharedReader = null;
+        }
+      })();
+    }
+
+    // ==============================================
+    // Strict upload – uses shared reader for ACK detection
+    // ==============================================
+    async function startStrictFirmwareUpload() {
+      if (isFirmwareStrictUploadActive || currentLineIndex >= validLines.length) return;
+
+      debugWindow.value += "startStrictFirmwareUpload called – starting\n";
+
+      isFirmwareStrictUploadActive = true;
+      isInUploadMode = true; // switch to upload mode
+      ackState = { index: 0, totalBytes: 0 }; // reset ACK state
+
+      document.getElementById('fw_prepare').disabled = true;
+      document.getElementById('start_strict_auto').disabled = true;
+      document.getElementById('send_next_line').disabled = true;
+
+      debugWindow.value += "→ Entering upload mode – routing incoming bytes to ACK detection\n";
+
+      try {
+        await uploadHexLines(port, validLines.slice(currentLineIndex));
+        currentLineIndex = validLines.length;
+        document.getElementById('current_line_num').textContent = `Line ${currentLineIndex}/${validLines.length}`;
+      } catch (err) {
+        debugWindow.value += `Strict upload failed: ${err.message}\n`;
+      } finally {
+        isFirmwareStrictUploadActive = false;
+        isInUploadMode = false; // switch back to terminal mode
+        debugWindow.value += "→ Upload complete – routing incoming bytes back to terminal display\n";
+
+        document.getElementById('fw_prepare').disabled = false;
+        const canUpload = validLines.length > 0 && currentLineIndex < validLines.length;
+        document.getElementById('start_strict_auto').disabled = !canUpload;
+        document.getElementById('send_next_line').disabled = !canUpload;
+      }
+    }
+
+    async function uploadHexLines(localPort, hexLines) {
+      if (!portOpen) throw new Error("Port closed before upload started");
+      if (hexLines.length === 0) return;
+
+      const writer = localPort.writable.getWriter();
+
+      const startTime = Date.now();
+      let confirmedLines = 0;
+
+      try {
+        for (let i = 0; i < hexLines.length; i++) {
+          if (!portOpen) throw new Error("Port closed mid-upload");
+
+          const line = hexLines[i] + "\r";  // ← only \r (0x0D) as terminator
+          const bytes = textEncoder.encode(line);
+
+          debugWindow.value += `Attempting to write line ${i+1}/${hexLines.length} (${bytes.length} bytes)...\n`;
+
+          // Create promise BEFORE sending (except first line)
+          const ackPromise = (i === 0) ? Promise.resolve() : waitForAck();
+
+          await writer.write(bytes);
+          await new Promise(r => setTimeout(r, 2)); // flush delay for FT245RL
+
+          debugWindow.value += `Write completed for line ${i+1}\n`;
+
+          const sentPercent = Math.round(((i + 1) / hexLines.length) * 100);
+          fwProgress.value = sentPercent;
+          fwStatus.textContent = `Sent line ${i+1}/${hexLines.length} (${sentPercent}%) – ${i === 0 ? 'no ACK expected' : 'waiting for ACK'}`;
+
+          if (i === 0) {
+            debugWindow.value += `Strict upload — sent first line (no prior ACK required): ${hexLines[i].trim()}\n`;
+            confirmedLines = 1;
+          } else {
+            debugWindow.value += `Strict upload — sent line ${i+1}/${hexLines.length}: ${hexLines[i].trim()}\n`;
+            debugWindow.value += "Waiting for 13 06 11...\n";
+            await ackPromise;
+            confirmedLines++;
+            const confirmedPercent = Math.round((confirmedLines / hexLines.length) * 100);
+            fwProgress.value = confirmedPercent;
+            fwStatus.textContent = `Confirmed ${confirmedLines}/${hexLines.length} lines (${confirmedPercent}%)`;
+          }
+
+          const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+          const min = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+          const sec = String(elapsedSec % 60).padStart(2, '0');
+          elapsedEl.textContent = `Elapsed: ${min}:${sec}`;
+        }
+
+        debugWindow.value += "Strict upload complete – all ACKs received\n";
+        fwStatus.textContent = "Upload complete";
+        fwProgress.value = 100;
+      } catch (err) {
+        debugWindow.value += `Strict upload failed at line ${confirmedLines + 1}: ${err.message}\n`;
+        fwStatus.textContent = `Failed: ${err.message}`;
+        throw err;
+      } finally {
+        try { writer.releaseLock(); } catch {}
+      }
+    }
+
+    async function waitForAck() {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          resolveCurrentAck = null;
+          reject(new Error("ACK timeout – bootloader not responding"));
+        }, 5000);
+
+        resolveCurrentAck = () => {
+          clearTimeout(timeout);
+          resolveCurrentAck = null;
+          resolve();
+        };
+      });
+    }
+
+    // ==============================================
+    // DOM ready – initialize
+    // ==============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      termInput     = document.getElementById("term_input");
+      sendBtn       = document.getElementById("send");
+      clearBtn      = document.getElementById("clear");
+      openBtn       = document.getElementById("openclose_port");
+      portInfo      = document.getElementById("port_info");
+      termWindow    = document.getElementById("term_window");
+      debugWindow   = document.getElementById("debug_window");
+      csumBtn       = document.getElementById("csum");
+      csumResult    = document.getElementById("csum_result");
+      rxCountEl     = document.getElementById("rx_count");
+      fwProgress    = document.getElementById("fw_progress");
+      fwStatus      = document.getElementById("fw_status");
+      elapsedEl     = document.getElementById("elapsed_time");
+
+      const browseBtn     = document.getElementById('fw_browse');
+      const fileInput     = document.getElementById('fw_file_input');
+      const fileNameSpan  = document.getElementById('fw_file_name');
+      const prepareBtn    = document.getElementById('fw_prepare');
+      const strictAutoBtn = document.getElementById('start_strict_auto');
+      const sendNextBtn   = document.getElementById('send_next_line');
+      const lineNumSpan   = document.getElementById('current_line_num');
+      const statusDiv     = document.getElementById('fw_status');
+
+      if (!browseBtn || !fileInput || !fileNameSpan || !prepareBtn || !strictAutoBtn || !sendNextBtn || !lineNumSpan || !statusDiv) {
+        console.error('Required firmware UI elements not found');
+        if (debugWindow) debugWindow.value += "ERROR: Firmware UI elements missing – upload disabled.\n";
+        return;
+      }
+
+      browseBtn.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext !== 'hex' && ext !== 'tthex') {
+          statusDiv.textContent = 'Please select a .hex or .tthex file';
+          fileInput.value = '';
+          return;
+        }
+        selectedFile = file;
+        fileNameSpan.textContent = file.name;
+        prepareBtn.disabled = false;
+        statusDiv.textContent = 'File ready – click Prepare Upload';
+      });
+
+      prepareBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
+        prepareBtn.disabled = true;
+        statusDiv.textContent = 'Preparing lines...';
+
+        try {
+          const text = await selectedFile.text();
+          const lines = text.split(/\r?\n/);
+
+          validLines = lines
+            .map(l => l.trim())
+            .filter(l => l && !l.startsWith(';') && !l.startsWith('#') && (l.startsWith(':') || l.startsWith('|')));
+
+          if (validLines.length === 0) throw new Error("No valid HEX lines found");
+
+          statusDiv.textContent = `Ready: ${validLines.length} lines`;
+          sendNextBtn.disabled = false;
+          strictAutoBtn.disabled = false;
+          lineNumSpan.textContent = `Line 0/${validLines.length}`;
+          currentLineIndex = 0;
+          debugWindow.value += `Prepared ${validLines.length} lines\n`;
+        } catch (err) {
+          statusDiv.textContent = 'Error: ' + err.message;
+          debugWindow.value += `Prep error: ${err.message}\n`;
+        } finally {
+          prepareBtn.disabled = false;
+        }
+      });
+
+      sendNextBtn.addEventListener('click', async () => {
+        if (isFirmwareStrictUploadActive) {
+          debugWindow.value += "Cannot send manual line – strict upload in progress\n";
+          return;
+        }
+        if (currentLineIndex >= validLines.length) return;
+
+        const line = validLines[currentLineIndex];
+        const trimmed = line.trim();
+        const lineBytes = textEncoder.encode(trimmed + "\r");
+
+        debugWindow.value += `Manual send line ${currentLineIndex + 1}: ${trimmed}\n`;
+        await sendBytes(lineBytes);
+
+        currentLineIndex++;
+        lineNumSpan.textContent = `Line ${currentLineIndex}/${validLines.length}`;
+
+        if (currentLineIndex >= validLines.length) {
+          debugWindow.value += "Manual upload complete\n";
+          sendNextBtn.disabled = true;
+          strictAutoBtn.disabled = true;
+          statusDiv.textContent = 'Upload complete';
+        }
+      });
+
+      strictAutoBtn.addEventListener('click', startStrictFirmwareUpload);
+
+      csumBtn.addEventListener("click", calculateCSUM);
+      clearBtn.addEventListener("click", () => {
+        termWindow.value = "";
+        rxByteCount = 0;
+        rxCountEl.textContent = "0 bytes received";
+      });
+      openBtn.addEventListener("click", togglePort);
+      sendBtn.addEventListener("click", sendData);
+      termInput.addEventListener("keydown", detectEnter);
+      termInput.addEventListener("input", liveCleanInput);
+
+      document.getElementById("display_mode").addEventListener("change", (e) => {
+        displayMode = e.target.value;
+        debugWindow.value += `[Display mode set to ${displayMode} — applies to next received data]\n`;
+      });
+
+      updateUI();
+      debugWindow.value += "Application initialized.\n";
+    });
+  </script>
 </body>
 </html>
-
