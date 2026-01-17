@@ -29,7 +29,7 @@
   </div>
   <h2>CM5-LTS Serial Tool</h2>
   <label for="term_input">Send Bytes (hex)</label>
-  <textarea id="term_input" placeholder="Enter hex bytes (e.g. c3050001b6)"></textarea>
+  <textarea id="term_input" placeholder="Enter hex bytes"></textarea>
   <div style="margin: 12px 0;">
     <button id="csum">Calculate CSUM</button>
     <input id="csum_result" readonly size="3" value="00">
@@ -74,7 +74,7 @@
 
   <script>
     // ==============================================
-    // Global variables
+    // Global variables (declared once only)
     // ==============================================
     let port = null;
     let portOpen = false;
@@ -97,7 +97,7 @@
     let fwProgress, fwStatus, elapsedEl;
 
     // ==============================================
-    // UI & terminal helpers (unchanged)
+    // UI & terminal helpers
     // ==============================================
     function updateUI(connected = portOpen) {
       openBtn.textContent = connected ? "Close Port" : "Open Port";
@@ -183,26 +183,41 @@
           return;
         }
       }
+
       let hex = termInput.value.trim().toUpperCase().replace(/[^0-9A-F]/g, '');
       if (hex.length === 0) {
         debugWindow.value += "Nothing to send\n";
         return;
       }
       if (hex.length % 2 !== 0) {
-        debugWindow.value += "Odd hex length\n";
+        debugWindow.value += "Odd hex length – must be even\n";
         return;
       }
+
+      let bytesArray = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        bytesArray[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+      }
+
+      let csumByte = null;
+      if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
+        csumByte = parseInt(csumResult.value, 16);
+        debugWindow.value += `Adding CSUM byte: 0x${csumResult.value}\n`;
+      }
+
       rxByteCount = 0;
       rxCountEl.textContent = "0 bytes received";
       termWindow.value = "";
-      let toSend = hex;
-      if (csumResult.value.length === 2 && /^[0-9A-F]{2}$/i.test(csumResult.value)) {
-        toSend += csumResult.value;
-      }
-      const bytes = textEncoder.encode(toSend);
+
       try {
-        await sendBytes(bytes);
-        debugWindow.value += `Sent: ${toSend}\n`;
+        const writer = port.writable.getWriter();
+        await writer.write(bytesArray);
+        if (csumByte !== null) await writer.write(Uint8Array.from([csumByte]));
+        await new Promise(r => setTimeout(r, 2));
+        writer.releaseLock().catch(() => {});
+        let sentHex = Array.from(bytesArray).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+        if (csumByte !== null) sentHex += csumByte.toString(16).padStart(2, '0').toUpperCase();
+        debugWindow.value += `Sent hex: ${sentHex} (${bytesArray.length + (csumByte ? 1 : 0)} bytes)\n`;
       } catch (err) {
         debugWindow.value += `Send error: ${err.message}\n`;
       }
@@ -290,9 +305,6 @@
       })();
     }
 
-    // ==============================================
-    // Bootloader init – hook first, send immediately
-    // ==============================================
     async function ensureBootloaderReady(writer) {
       const startMs = Date.now();
       const log = (msg) => {
@@ -306,7 +318,7 @@
       let state = 0;
       let sigResolved = false;
 
-      log("Signature hook installed and active (state = 0) – ready for reset");
+      log("Signature hook active (state = 0)");
 
       const sigPromise = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -358,17 +370,11 @@
         }, 30);
       });
 
-      // Send reset **immediately** – response can arrive before next line executes
       const resetCmd = Uint8Array.from([0xC3, 0x05, 0x00, 0x01, 0xC0, 0x07]);
       await writer.write(resetCmd);
       log("Reset command written to stream (response may already be arriving)");
 
-      // Do NOT wait for ready or any delay here – keep the loop spinning
-      // The sigPromise will resolve as soon as bytes hit
-
       await sigPromise;
-
-      log("Bootloader signatures detected");
 
       log("Waiting 400 ms for stabilization...");
       await new Promise(r => setTimeout(r, 400));
@@ -557,8 +563,8 @@
         if (currentLineIndex >= validLines.length) return;
         const line = validLines[currentLineIndex];
         const trimmed = line.trim();
-        const lineBytes = textEncoder.encode(trimmed + "\r");
         debugWindow.value += `Manual send line ${currentLineIndex + 1}: ${trimmed}\n`;
+        const lineBytes = textEncoder.encode(trimmed + "\r");
         await sendBytes(lineBytes);
         currentLineIndex++;
         lineNumSpan.textContent = `Line ${currentLineIndex}/${validLines.length}`;
